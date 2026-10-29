@@ -225,6 +225,19 @@ export default function Export() {
         )}
       </div>
 
+      <div style={{ margin: '14px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: '#5F6168' }}>Share</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+          <button type="button" onClick={() => navigate('GifClip', { recordingId: r.id })} style={{ ...OUTLINE, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" strokeWidth="2" {...stroke} aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M10 9.5v5l4-2.5z" /></svg>Make a GIF
+          </button>
+          {/* DriveLink is T11; this has no target until then. */}
+          <button type="button" style={{ ...OUTLINE, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" strokeWidth="2" {...stroke} aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" /></svg>Share a link
+          </button>
+        </div>
+      </div>
+
       <div style={{ flexGrow: 1 }} />
       <div style={{ margin: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 500, color: '#5F6168' }}>Just the notes</span>
