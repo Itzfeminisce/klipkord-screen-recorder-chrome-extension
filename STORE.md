@@ -1,6 +1,6 @@
 # Chrome Web Store listing
 
-Build the zip with `npm run zip` (needs `WXT_EXTENSION_KEY`). The file is `.output/klipkord-<version>-chrome.zip`. Raise `version` in `package.json` for every upload.
+Build the zip with `npm run zip`. For the first upload only, add the private key as `key.pem` at the zip root so the store keeps the id `iapgbifdchhmidblniddncnagghloepi`; never commit it. The file is `.output/klipkord-<version>-chrome.zip`. Raise `version` in `package.json` for every upload.
 
 ## Listing text
 - **Name:** Klipkord

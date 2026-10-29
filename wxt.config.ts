@@ -1,12 +1,11 @@
 import { defineConfig } from 'wxt';
 
-// A stable extension ID fixes the Penv Cloud redirect URL; set WXT_EXTENSION_KEY for release builds.
-const extensionKey = process.env.WXT_EXTENSION_KEY || undefined;
-// Release = `wxt zip` or `--mode release`. Plain dev builds work without the key.
+// Klipkord's public key fixes the extension id (iapgbifdchhmidblniddncnagghloepi) for Penv Cloud, Google and the Web Store.
+// It is public; the private key stays with the owner and is uploaded once, with the first Web Store zip.
+const KLIPKORD_KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsgE5EguZ5k4ildTMikSj16eCiu4JLqrcIcvovWNeR7f5AYXIeaZmunEwQm1S+f0f02OrkjTGjqnN5kWi9spIk+uhVIYYpT7Jn38uE9g51/0Gz8dgPeFpQnW8xdC6YJMjLangx8C1U5izTRWK7GuGl6ORDC7GsBLlcMZsajhbhBozCfVsmvBEujinqr/b/nIY/OvMTVlnMkGTSDA+8OT0SKoSPm9F742wITYjkSrbG4XRqrmRxYGebR6oi6pQ1e+LGkcjragX/KuiM3qgI7/YGRkRCspV0IG1L7x8THxYF8mn8gA6weVIWNo6BkuS1cpzUGDhnbpXc86NBoO6DVpKewIDAQAB';
+const extensionKey = process.env.WXT_EXTENSION_KEY || KLIPKORD_KEY;
+// Release = `wxt zip` or `--mode release`.
 const release = process.argv.includes('zip') || process.argv.includes('release');
-if (release && !extensionKey) {
-  throw new Error('Release build needs WXT_EXTENSION_KEY, the key that fixes the Penv Cloud redirect URL. Set it in .env.local or the environment.');
-}
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
@@ -19,8 +18,7 @@ export default defineConfig({
     },
   },
   manifest: {
-    // O1: the Web Store item's public key goes in `manifest.key` (until then WXT_EXTENSION_KEY sets it).
-    ...(extensionKey ? { key: extensionKey } : {}),
+    key: extensionKey,
     name: 'Klipkord',
     description: 'Screen recorder in the Chrome side panel',
     // activeTab (granted by a shortcut) + scripting draw the marker toast in the active tab.

@@ -28,6 +28,10 @@ describe('manifest', () => {
     expect(commands['toggle-draw']?.description).toBe('Draw on this page');
   });
 
+  it('fixes the extension id with Klipkord\'s public key by default', async () => {
+    expect((await manifest()).key).toMatch(/^MIIBIjAN/);
+  });
+
   it('puts the extension key in manifest.key', async () => {
     vi.stubEnv('WXT_EXTENSION_KEY', 'test-public-key');
     expect((await manifest()).key).toBe('test-public-key');

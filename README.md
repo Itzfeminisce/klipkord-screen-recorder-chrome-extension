@@ -82,7 +82,7 @@ npm run build      # build to .output/chrome-mv3
 npm run zip        # store-ready zip in .output/
 ```
 
-- `npm run zip` needs `WXT_EXTENSION_KEY` in `.env.local` or the environment.
+- The manifest carries Klipkord's public key, so the extension id is always `iapgbifdchhmidblniddncnagghloepi`. Google Drive needs `WXT_GOOGLE_CLIENT_ID` in `.env.local`.
   It fixes the extension ID, and so the Penv Cloud redirect URL. Plain builds work without it.
 - The release zip leaves out the developer machine check. See [CHECK.md](CHECK.md).
 - `node scripts/make-icons.mjs` rewrites the icons in `public/icon/`.
