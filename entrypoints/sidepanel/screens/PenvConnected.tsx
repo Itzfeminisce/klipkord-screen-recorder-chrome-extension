@@ -5,7 +5,7 @@ import { forgetAll, loadKeyStatus } from '@/lib/connect';
 import { jobsFor, serviceLabel, type KeyName } from '@/lib/keyDetect';
 import { disconnectPenvApp } from '@/lib/penvApp';
 import { getSettings, updateSettings } from '@/lib/settings';
-import { canStart, cloudSettings, notesEngineFor, PENV_CLOUD_URL, STATUS_WORD } from '@/lib/setup';
+import { canStart, cloudSettings, noUsableKeys, notesEngineFor, PENV_CLOUD_URL, STATUS_WORD } from '@/lib/setup';
 import type { Settings } from '@/lib/types';
 import { BannerAction, Check, CARD, ExternalLink, Head, Heading, MONO, PAGE, PenvTile, PrimaryButton, StateBanner, STATUS_TEXT, useKeyState } from './Setup';
 
@@ -97,7 +97,7 @@ export default function PenvConnected() {
         </div>
       </div>
 
-      {keys.loaded.length === 0 && (
+      {noUsableKeys(keys.loaded, keys.status) && (
         <div style={{ margin: '12px 24px 0' }}>
           <StateBanner mark="pv" tone="error" title="None of the shared keys work with Klipkord" body="Share a Groq key from Penv Cloud, or add one there first."
             action={<BannerAction onClick={() => navigate('PenvConnect')}>Change which keys</BannerAction>} />

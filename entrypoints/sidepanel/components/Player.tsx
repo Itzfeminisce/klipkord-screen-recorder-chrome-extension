@@ -278,7 +278,7 @@ export function ReviewShell({ tab, window: own = false, children }: { tab: Revie
         </div>
       </div>
 
-      {tab === 'Review' && (
+      {(tab === 'Review' || tab === 'ReviewAsk') && (
         <div style={{ margin: '12px 16px 0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           {style && (
             <button type="button" onClick={() => go('NoteStyle')}

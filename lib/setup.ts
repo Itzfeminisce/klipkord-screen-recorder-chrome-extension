@@ -141,6 +141,11 @@ export function canStart(loaded: string[], status: StatusMap): boolean {
   return usable.some((n) => status[n] === 'ok' || status[n] === 'unreachable');
 }
 
+/** True when no key loaded or every loaded key was Rejected (penv-no-usable-keys). */
+export function noUsableKeys(loaded: string[], status: StatusMap): boolean {
+  return loaded.every((n) => status[n] === 'rejected');
+}
+
 /** The AI settings "Start recording" saves once keys work: cloud only when a Groq key can transcribe. */
 export function cloudSettings(loaded: string[], status: StatusMap): Pick<Settings, 'ai' | 'notesEngine'> | null {
   const groq = status.GROQ_API_KEY === 'ok' || status.GROQ_API_KEY === 'unreachable';

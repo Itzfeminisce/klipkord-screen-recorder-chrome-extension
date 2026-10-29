@@ -36,6 +36,7 @@ describe('gifPlan', () => {
   it('keeps the recording shape with an even height', () => {
     expect(gifHeight(1920, 1080)).toBe(360);
     expect(gifHeight(0, 0)).toBe(360);
+    expect(gifHeight(1280, 1024)).toBe(512);
     expect(gifHeight(1280, 1024) % 2).toBe(0);
   });
 

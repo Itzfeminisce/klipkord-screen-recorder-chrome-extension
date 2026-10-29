@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-  builtinAiPresent, canStart, classifyPaste, cloudSettings, detectMachine, isFirstRun, missingKeys, notesOptions,
+  builtinAiPresent, canStart, noUsableKeys, classifyPaste, cloudSettings, detectMachine, isFirstRun, missingKeys, notesOptions,
   penvRowStatus, requestAccess, setupChoice, transcriptsStatus,
 } from './setup';
 
@@ -116,5 +116,16 @@ describe('requestAccess', () => {
   it('keeps the mic when the camera is refused', async () => {
     expect(await requestAccess(true, media((c) => !c.video))).toEqual({ mic: true, camera: false });
     expect(await requestAccess(true, media(() => false))).toEqual({ mic: false, camera: false });
+  });
+});
+
+describe('noUsableKeys', () => {
+  it('is true when nothing loaded or every loaded key was rejected', () => {
+    expect(noUsableKeys([], {})).toBe(true);
+    expect(noUsableKeys(['GROQ_API_KEY'], { GROQ_API_KEY: 'rejected' })).toBe(true);
+  });
+  it('is false once any key is not rejected', () => {
+    expect(noUsableKeys(['GROQ_API_KEY', 'OPENAI_API_KEY'], { GROQ_API_KEY: 'rejected', OPENAI_API_KEY: 'ok' })).toBe(false);
+    expect(noUsableKeys(['GROQ_API_KEY'], { GROQ_API_KEY: 'checking' })).toBe(false);
   });
 });

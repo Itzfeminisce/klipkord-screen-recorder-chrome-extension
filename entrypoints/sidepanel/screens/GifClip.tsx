@@ -130,6 +130,7 @@ export default function GifClip() {
   const [range, setRange] = useState<GifRange>({ start: 0, end: 0 });
   const [now, setNow] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [size, setSize] = useState({ w: 1920, h: 1080 }); // until the video reports its own
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' });
   const video = useRef<HTMLVideoElement>(null);
   const track = useRef<HTMLDivElement>(null);
@@ -174,6 +175,7 @@ export default function GifClip() {
   const onMetadata = () => {
     const v = video.current;
     if (!v) return;
+    if (v.videoWidth > 0 && v.videoHeight > 0) setSize({ w: v.videoWidth, h: v.videoHeight });
     if (needsDurationProbe(v.duration)) { probing.current = true; v.currentTime = PROBE_SEEK_SECONDS; }
     else seekEdited(rangeRef.current.start);
   };
@@ -324,7 +326,7 @@ export default function GifClip() {
         {RULE}
         <Row label="Length"><span><span style={mono}>{Math.round(length / 1000)} s</span> <span style={{ fontSize: 12, color: '#6E7079' }}>of 15 s at most</span></span></Row>
         {RULE}
-        <Row label="Size"><span style={mono}>about {formatBytes(estimateGifBytes(range, GIF_WIDTH, gifHeight(1920, 1080)))}</span></Row>
+        <Row label="Size"><span style={mono}>about {formatBytes(estimateGifBytes(range, GIF_WIDTH, gifHeight(size.w, size.h)))}</span></Row>
         {RULE}
         <Row label="Quality"><span style={mono}>{GIF_WIDTH} px wide · {GIF_FPS} fps</span></Row>
       </div>
