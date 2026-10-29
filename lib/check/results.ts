@@ -1,11 +1,14 @@
 export type TestId = 'mp4' | 'sound' | 'composite' | 'whisper' | 'builtinAi';
-export type Status = 'not run' | 'running' | 'pass' | 'fail';
+export type Status = 'not run' | 'running' | 'pass' | 'warn' | 'fail';
 export type Value = string | number | boolean | null;
 
 export interface TestResult {
   status: Status;
   numbers: Record<string, Value>;
   error?: string;
+  ranAt?: string;
+  // Earlier finished runs of this test, oldest first.
+  earlier?: TestResult[];
 }
 
 export interface Results {
@@ -30,8 +33,24 @@ export function emptyResults(machine: Record<string, Value>, now: Date): Results
   return { app: 'klipkord', check: 'T0', ranAt: now.toISOString(), machine, tests };
 }
 
+const finished = (s: Status) => s === 'pass' || s === 'warn' || s === 'fail';
+
+// A new run keeps every earlier finished run of the same test.
 export function withResult(results: Results, id: TestId, result: TestResult, now: Date): Results {
-  return { ...results, ranAt: now.toISOString(), tests: { ...results.tests, [id]: result } };
+  const prev = results.tests[id];
+  let earlier = prev.earlier ?? [];
+  if (finished(prev.status)) {
+    const { earlier: _, ...last } = prev;
+    earlier = [...earlier, last];
+  }
+  const next: TestResult = { ...result };
+  delete next.earlier;
+  if (earlier.length) next.earlier = earlier;
+  return { ...results, ranAt: now.toISOString(), tests: { ...results.tests, [id]: next } };
+}
+
+export function failingTests(results: Results): TestId[] {
+  return TESTS.map((t) => t.id).filter((id) => ['fail', 'warn'].includes(results.tests[id].status));
 }
 
 export function errorText(error: unknown): string {

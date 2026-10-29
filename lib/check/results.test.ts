@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { availabilityOf, emptyResults, errorText, numberLines, resultsJson, withResult } from './results';
+import { availabilityOf, emptyResults, errorText, failingTests, numberLines, resultsJson, withResult } from './results';
 
 const now = new Date('2026-10-29T10:00:00Z');
 
@@ -32,5 +32,26 @@ describe('results', () => {
     expect(availabilityOf('downloadable')).toBe('downloadable');
     expect(availabilityOf(undefined)).toBe('missing');
     expect(availabilityOf('readily')).toBe('missing');
+  });
+
+  it('keeps earlier finished runs when a test runs again', () => {
+    let r = emptyResults({}, now);
+    r = withResult(r, 'sound', { status: 'running', numbers: {} }, now);
+    r = withResult(r, 'sound', { status: 'warn', numbers: { peak: -99 } }, now);
+    r = withResult(r, 'sound', { status: 'running', numbers: {} }, now);
+    expect(r.tests.sound.earlier).toEqual([{ status: 'warn', numbers: { peak: -99 } }]);
+    r = withResult(r, 'sound', { status: 'pass', numbers: { peak: -20 } }, now);
+    expect(r.tests.sound.earlier).toEqual([{ status: 'warn', numbers: { peak: -99 } }]);
+    r = withResult(r, 'sound', { status: 'pass', numbers: { peak: -18 } }, now);
+    expect(r.tests.sound.earlier?.map((e) => e.numbers.peak)).toEqual([-99, -20]);
+    expect(r.tests.sound.earlier?.every((e) => e.earlier === undefined)).toBe(true);
+  });
+
+  it('lists failing and warning tests in order', () => {
+    let r = emptyResults({}, now);
+    r = withResult(r, 'whisper', { status: 'fail', numbers: {} }, now);
+    r = withResult(r, 'sound', { status: 'warn', numbers: {} }, now);
+    r = withResult(r, 'mp4', { status: 'pass', numbers: {} }, now);
+    expect(failingTests(r)).toEqual(['sound', 'whisper']);
   });
 });

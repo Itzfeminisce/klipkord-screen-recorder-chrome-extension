@@ -6,6 +6,17 @@ import ortWasmUrl from '../../node_modules/onnxruntime-web/dist/ort-wasm-simd-th
 // Extension pages may not load remote code, so ONNX Runtime's wasm ships inside the extension.
 env.backends.onnx.wasm!.wasmPaths = { wasm: ortWasmUrl };
 env.allowLocalModels = false;
+// Threads need cross-origin isolation (set in the manifest); without it ONNX Runtime uses one.
+const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, self.navigator.hardwareConcurrency || 1)) : 1;
+env.backends.onnx.wasm!.numThreads = threads;
+
+type Device = 'webgpu' | 'wasm';
+// Quantized weights keep the CPU path fast; WebGPU keeps a full-precision encoder.
+const DTYPES: Record<Device, Record<string, string>> = {
+  webgpu: { encoder_model: 'fp32', decoder_model_merged: 'q4' },
+  wasm: { encoder_model: 'q8', decoder_model_merged: 'q8' },
+};
+const dtypeText = (d: Device) => Object.entries(DTYPES[d]).map(([k, v]) => `${k}=${v}`).join(' ');
 
 type InMessage =
   | { type: 'load'; model: string }
@@ -14,9 +25,8 @@ type InMessage =
 
 let asr: AutomaticSpeechRecognitionPipeline | null = null;
 
-async function create(model: string, device: 'webgpu' | 'wasm', sizes: Map<string, number>) {
-  const dtype =
-    device === 'webgpu' ? { encoder_model: 'fp32', decoder_model_merged: 'q4' } : { encoder_model: 'q8', decoder_model_merged: 'q8' };
+async function create(model: string, device: Device, sizes: Map<string, number>) {
+  const dtype = DTYPES[device];
   // Cast keeps tsc from expanding the pipeline's task overloads.
   const make = pipeline as (task: string, model: string, options: object) => Promise<unknown>;
   return (await make('automatic-speech-recognition', model, {
@@ -31,10 +41,17 @@ async function create(model: string, device: 'webgpu' | 'wasm', sizes: Map<strin
 async function load(model: string) {
   const sizes = new Map<string, number>();
   const start = performance.now();
-  let device: 'webgpu' | 'wasm' = 'wasm';
+  let device: Device = 'wasm';
   let webgpuError: string | null = null;
-  const nav = self.navigator as Navigator & { gpu?: unknown };
-  if (nav.gpu) {
+  const nav = self.navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } };
+  // navigator.gpu can exist with no usable adapter, so ask for one before trying WebGPU.
+  let adapter: unknown = null;
+  try {
+    adapter = nav.gpu ? await nav.gpu.requestAdapter() : null;
+  } catch (error) {
+    webgpuError = error instanceof Error ? error.message : String(error);
+  }
+  if (adapter) {
     try {
       asr = await create(model, 'webgpu', sizes);
       device = 'webgpu';
@@ -43,12 +60,21 @@ async function load(model: string) {
       webgpuError = error instanceof Error ? error.message : String(error);
     }
   } else {
-    webgpuError = 'navigator.gpu missing';
+    webgpuError ??= nav.gpu ? 'no WebGPU adapter' : 'navigator.gpu missing';
   }
   if (!asr) asr = await create(model, 'wasm', sizes);
   let bytes = 0;
   for (const b of sizes.values()) bytes += b;
-  self.postMessage({ type: 'loaded', device, webgpuError, downloadBytes: bytes, loadMs: performance.now() - start });
+  self.postMessage({
+    type: 'loaded',
+    device,
+    dtype: dtypeText(device),
+    threads: device === 'wasm' ? threads : null,
+    crossOriginIsolated: self.crossOriginIsolated,
+    webgpuError,
+    downloadBytes: bytes,
+    loadMs: performance.now() - start,
+  });
 }
 
 async function transcribe(id: number, audio: Float32Array) {
