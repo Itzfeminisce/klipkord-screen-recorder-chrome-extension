@@ -1,3 +1,5 @@
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
 import { cleanupStack, guard } from '@/lib/check/guard';
 import { deleteRecording, putRecording, updateRecording, type RecordingPatch } from '@/lib/db';
 import { onMessage, send, type MessageOf } from '@/lib/messages';

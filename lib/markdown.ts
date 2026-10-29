@@ -54,6 +54,6 @@ export function markdownToHtml(md: string, title: string): string {
     else if (line.trim()) { close(); out.push(`<p>${esc(line)}</p>`); }
   }
   close();
-  const css = 'body{font:14px/1.5 system-ui,sans-serif;color:#111114;margin:32px}h1{font-size:22px}h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#5F6168;margin:20px 0 6px}li{margin:3px 0}p{margin:6px 0}';
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${out.join('')}</body></html>`;
+  const css = '@page{size:A4;margin:0}body{margin:0;font:14px/1.5 system-ui,sans-serif;color:#111114}main{box-sizing:border-box;width:794px;max-width:100%;padding:32px}h1{margin:0;font-size:22px;line-height:1.3}h2{margin:20px 0 6px;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#5F6168}ul,ol{margin:0;padding-left:28px}li{margin:3px 0}p{margin:6px 0}';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body><main>${out.join('')}</main></body></html>`;
 }

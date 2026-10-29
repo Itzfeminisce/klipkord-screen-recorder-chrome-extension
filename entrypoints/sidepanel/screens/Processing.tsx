@@ -7,6 +7,7 @@ import { formatBytes, formatClock } from '@/lib/time';
 import type { Recording } from '@/lib/types';
 import { DETECTED_BLURB, DETECTED_TITLE } from '@/lib/notes/style';
 import { Brand, ICONS, Icon, StateCard } from './Home';
+import { T_ICONS, useTranscript } from './Recording';
 import { NoSpeechFound, NotesUnavailable, WritingBar, noSpeech, useNotesJob } from '../components/NotesBody';
 
 /** The transcript row's title: shown as writing until the transcript is done. */
@@ -24,6 +25,7 @@ export default function Processing() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const typed = useRef(false);
   const progress = useNotesJob(id);
+  const cloudDown = Boolean(useTranscript(id)?.cloudDown);
   const [now, setNow] = useState(() => Date.now());
   const phase = progress?.phase;
   const suggested = progress?.suggestedTitle;
@@ -79,6 +81,14 @@ export default function Processing() {
           <StateCard icon={ICONS.stop} tone="grey" title="You stopped sharing, so recording ended"
             body={`Everything up to ${formatClock(rec.duration)} is saved, and Klipkord is writing the notes.`}
             action="Watch it now" onAction={watch} />
+        </div>
+      )}
+
+      {cloudDown && (
+        <div style={{ margin: '16px 24px 0' }}>
+          <StateCard icon={T_ICONS.cloud} tone="amber" title="Groq isn’t responding"
+            body="Klipkord switched to on-device AI for this recording, so your transcript keeps going."
+            action="Open Settings" onAction={() => navigate('Settings')} />
         </div>
       )}
 

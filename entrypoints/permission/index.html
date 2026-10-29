@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Mic and camera access</title>
     <style>
-      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f6f6f7; color: #111114; font-family: system-ui, sans-serif; }
-      main { max-width: 400px; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px; text-align: center; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f6f6f7; color: #111114; font-family: 'Geist Variable', system-ui, sans-serif; }
+      main { width: 400px; max-width: calc(100vw - 48px); box-sizing: content-box; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+      .logo { width: 56px; height: 56px; border-radius: 16px; background: #C2410C; display: flex; align-items: center; justify-content: center; }
+      .logo span { width: 20px; height: 20px; border-radius: 50%; background: #FFFFFF; }
       h1 { margin: 0; font-size: 26px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; }
       p { margin: 0; font-size: 15px; line-height: 1.5; color: #5f6168; }
       .hint { padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid #e8e8eb; font-size: 13px; }
@@ -15,6 +17,7 @@
   </head>
   <body>
     <main role="status" aria-live="polite">
+      <span class="logo" aria-hidden="true"><span></span></span>
       <h1>Let Klipkord hear and see you</h1>
       <p>Chrome will ask once, at the top left of this tab. Klipkord only records when you press Start, and you choose what to share each time.</p>
       <p class="hint">Pressed Block by mistake? Click the icon beside the address, then turn Microphone on.</p>

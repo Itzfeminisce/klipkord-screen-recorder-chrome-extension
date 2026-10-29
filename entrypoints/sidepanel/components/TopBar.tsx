@@ -3,10 +3,7 @@ import type { ReactNode } from 'react';
 export function BrandMark() {
   return (
     <span className="brand-mark" aria-hidden="true">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-        <rect x="3" y="5" width="18" height="14" rx="3" stroke="#FFFFFF" strokeWidth="2" />
-        <circle cx="12" cy="12" r="3" fill="#C2410C" />
-      </svg>
+      <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#FFFFFF' }} />
     </span>
   );
 }

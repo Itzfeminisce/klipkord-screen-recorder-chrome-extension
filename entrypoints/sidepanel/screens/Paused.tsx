@@ -39,7 +39,7 @@ export default function Paused() {
       <div style={{ padding: '0 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <button type="button" disabled={disabled} onClick={() => void act({ type: 'recorder/resume' })}
           style={{ height: 52, border: 'none', borderRadius: 14, background: '#C2410C', color: '#FFFFFF', font: 'inherit', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, cursor: 'pointer' }}>
-          <Icon>{ICONS.play}</Icon>Resume
+          <Icon fill>{ICONS.play}</Icon>Resume
         </button>
         <button type="button" disabled={disabled} onClick={() => void act({ type: 'recorder/stop' })}
           style={{ height: 48, border: 'none', borderRadius: 12, background: '#F6F6F7', color: '#111114', font: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
