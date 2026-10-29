@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { getRecording } from '@/lib/db';
 import {
-  PROBE_SEEK_SECONDS, chapterAt, formatLength, needsDurationProbe, percentOf, saveComments, sortComments, timeAtPoint,
+  PROBE_SEEK_SECONDS, formatLength, needsDurationProbe, percentOf, saveComments, sortComments, timeAtPoint,
 } from '@/lib/comments';
 import { playable } from '@/lib/editList';
 import { MARKER_LABEL } from '@/lib/markers';
+import { IDLE_MS, controlsVisible, currentCaption, currentChapterTitle, hideDelay, nextSpeed, timeLabel } from '@/lib/player';
 import { formatClock } from '@/lib/time';
 import { videoStore } from '@/lib/videoStore';
 import type { Comment, Recording } from '@/lib/types';
 import { STYLE_NAMES, dayAndTime } from '../screens/Home';
 import { useRouter, type ScreenName } from '../router';
+import { ControlRow, FullscreenOverlay } from './PlayerFullscreen';
 
 export type ReviewTab = 'Review' | 'ReviewTranscript' | 'ReviewComments' | 'ReviewAsk';
 
@@ -21,9 +23,7 @@ export interface ReviewContext {
   setComments: (comments: Comment[]) => void;
 }
 
-const MONO = "var(--mono, 'Geist Mono', monospace)";
 const PLAY = <svg width="18" height="18" viewBox="0 0 24 24" fill="#111114" aria-hidden="true"><path d="M8 5l12 7-12 7z" /></svg>;
-const PAUSE = <svg width="18" height="18" viewBox="0 0 24 24" fill="#111114" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" /></svg>;
 const stroke = { fill: 'none', stroke: 'currentColor', strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true } as const;
 
 interface TimelineProps {
@@ -94,6 +94,13 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
   const video = useRef<HTMLVideoElement>(null);
   const pending = useRef<number | null>(route.params.atMs ? route.params.atMs / 1000 : null);
   const probing = useRef(false);
+  const box = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const [captionsOn, setCaptionsOn] = useState(false);
+  const [moved, setMoved] = useState(0);
+  const [shown, setShown] = useState(true);
   const edits = rec?.edits ?? [];
   const length = rec && rec.duration > 0 ? rec.duration : Infinity;
 
@@ -114,6 +121,26 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
     }, (error) => console.error('Klipkord: could not open the video', error));
     return () => { gone = true; if (url) URL.revokeObjectURL(url); };
   }, [id, rec?.id, rec?.mime]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const sync = () => setFull(!!box.current && document.fullscreenElement === box.current);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
+  useEffect(() => { if (video.current) video.current.playbackRate = speed; }, [speed, src]);
+  useEffect(() => { if (video.current) video.current.muted = muted; }, [muted, src]);
+
+  // Full-screen controls hide 3 s after the last movement while playing.
+  useEffect(() => {
+    setShown(true);
+    if (!full || !playing) return;
+    const t = setTimeout(() => setShown(false), hideDelay(true, moved, Date.now()) || IDLE_MS);
+    return () => clearTimeout(t);
+  }, [full, playing, moved]);
+
+  const enterFull = () => box.current?.requestFullscreen().catch((error) => console.error('Klipkord: could not open full screen', error));
+  const exitFull = () => { if (document.fullscreenElement) document.exitFullscreen().catch((error) => console.error('Klipkord: could not leave full screen', error)); };
 
   const apply = useCallback(() => {
     const v = video.current;
@@ -179,7 +206,13 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
 
   if (!rec) return <main className="screen" style={{ height: '100vh' }} />;
 
-  const chapter = chapterAt(rec.summary?.chapters ?? [], now);
+  const chapterTitle = currentChapterTitle(rec.summary?.chapters ?? [], now);
+  const caption = currentCaption(rec.transcript, now);
+  const showControls = !full || controlsVisible(playing, moved, Date.now()) && shown;
+  const controls = {
+    playing, onToggle: toggle, time: timeLabel(now, rec.duration), chapter: chapterTitle,
+    speed, onSpeed: () => setSpeed((r) => nextSpeed(r)), muted, onVolume: () => setMuted((m) => !m),
+  };
   const style = rec.summary?.style;
   const timelineLabel = tab === 'ReviewComments' ? 'Timeline with comments' : 'Timeline';
 
@@ -197,7 +230,10 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
       </div>
 
       <div style={{ margin: '8px 16px 0', borderRadius: 14, background: '#111114', overflow: 'hidden' }}>
-        <div style={{ width: '100%', aspectRatio: '16 / 9', position: 'relative', background: '#26262B' }}>
+        <div ref={box} onMouseMove={() => full && setMoved(Date.now())} onTouchStart={() => full && setMoved(Date.now())}
+          style={full
+            ? { width: '100%', height: '100%', position: 'relative', background: '#000000', cursor: showControls ? 'default' : 'none' }
+            : { width: '100%', aspectRatio: '16 / 9', position: 'relative', background: '#26262B' }}>
           <video ref={video} src={src} playsInline preload="metadata" onLoadedMetadata={onMetadata} onDurationChange={settle} onSeeked={settle}
             onTimeUpdate={() => { settle(); onTime(); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
             onClick={toggle} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
@@ -205,18 +241,19 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
             <button type="button" aria-label="Play" onClick={toggle}
               style={{ position: 'absolute', left: '50%', top: '50%', width: 52, height: 52, margin: '-26px 0 0 -26px', padding: 0, border: 'none', borderRadius: '50%', background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{PLAY}</button>
           )}
-          {playing && (
-            <button type="button" aria-label="Pause" onClick={toggle}
-              style={{ position: 'absolute', right: 12, top: 12, width: 36, height: 36, padding: 0, border: 'none', borderRadius: '50%', background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{PAUSE}</button>
+          {full && captionsOn && caption && (
+            <div style={{ position: 'absolute', left: '10%', right: '10%', bottom: showControls ? 110 : 40, textAlign: 'center', pointerEvents: 'none' }}>
+              <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.75)', color: '#F6F6F7', fontSize: 20, lineHeight: 1.35 }}>{caption}</span>
+            </div>
+          )}
+          {full && (
+            <FullscreenOverlay {...controls} title={rec.title} visible={showControls} captionsOn={captionsOn} onCaptions={() => setCaptionsOn((c) => !c)} onExit={exitFull}
+              timeline={<Timeline label="Timeline" rec={rec} now={now} withComments={false} onSeek={seek} />} />
           )}
         </div>
         <div style={{ padding: '1px 12px 12px', display: 'flex', flexDirection: 'column', gap: 0 }}>
           <Timeline label={timelineLabel} rec={rec} now={now} withComments={tab === 'ReviewComments'} onSeek={seek} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontFamily: MONO, fontSize: 11, color: '#9A9BA3' }}>
-            <span>{formatClock(now)}</span>
-            {chapter && <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chapter.title}</span>}
-            <span>{formatLength(rec.duration)}</span>
-          </div>
+          <ControlRow {...controls} onFullScreen={enterFull} />
         </div>
       </div>
 
