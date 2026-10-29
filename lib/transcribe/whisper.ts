@@ -1,7 +1,9 @@
 /** Whisper in a worker (transformers.js, wasm q8, or WebGPU when there is an adapter). Models measured in T0. */
+import type { Heard } from './merge';
 
 export const LIVE_MODEL = 'onnx-community/whisper-tiny';   // RTF 0.29 on wasm q8, one thread
-export const BASE_MODEL = 'onnx-community/whisper-base';   // RTF 0.49; re-transcribes after stop
+// The _timestamped export carries the cross attentions that word times need (T0: plain exports give none).
+export const BASE_MODEL = 'onnx-community/whisper-base_timestamped';   // re-transcribes after stop, with word times
 // whisper-small is not offered: RTF 2.1 on the same machine.
 
 /** With a WebGPU adapter, live may use base. */
@@ -98,9 +100,11 @@ export class Whisper {
     return (await this.ask({ type: 'load', model })).device as Device;
   }
 
-  async transcribe(audio: Float32Array, language = 'auto'): Promise<string> {
+  /** With `words`, the model must be a _timestamped one; word times are ms from the start of `audio`. */
+  async transcribe(audio: Float32Array, language = 'auto', words = false): Promise<Heard> {
     const copy = audio.slice();
-    return String((await this.ask({ type: 'transcribe', audio: copy, language }, [copy.buffer])).text ?? '');
+    const a = await this.ask({ type: 'transcribe', audio: copy, language, words }, [copy.buffer]);
+    return { text: String(a.text ?? ''), ...(Array.isArray(a.words) ? { words: a.words as Heard['words'] } : {}) };
   }
 
   async dispose(): Promise<void> {

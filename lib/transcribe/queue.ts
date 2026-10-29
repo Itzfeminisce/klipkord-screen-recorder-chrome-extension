@@ -1,6 +1,7 @@
 import type { Segment } from '@/lib/types';
 import { isSilent, type Chunk } from './chunker';
 import { GroqError } from './groq';
+import { toSegment, type Heard } from './merge';
 
 export type Engine = 'local' | 'groq';
 
@@ -13,8 +14,8 @@ export interface QueueStatus {
 }
 
 export interface QueueDeps {
-  local: (audio: Float32Array) => Promise<string>;
-  groq: (audio: Float32Array) => Promise<string>;
+  local: (audio: Float32Array) => Promise<string | Heard>;
+  groq: (audio: Float32Array) => Promise<string | Heard>;
   online: () => boolean;
   onSegment: (seg: Segment) => void;
   onStatus: (status: QueueStatus) => void;
@@ -59,7 +60,7 @@ export function createQueue(deps: QueueDeps, wanted: Engine, behindAfter = BEHIN
   };
   const report = () => deps.onStatus(status());
 
-  async function runOne(chunk: Chunk): Promise<string> {
+  async function runOne(chunk: Chunk): Promise<string | Heard> {
     const cloud = wanted === 'groq' && !cloudDown;
     offline = cloud && !deps.online();
     if (cloud && !offline) {
@@ -85,8 +86,9 @@ export function createQueue(deps: QueueDeps, wanted: Engine, behindAfter = BEHIN
       const chunk = waiting[0]!;
       report();
       try {
-        const text = isSilent(chunk.audio) ? '' : await runOne(chunk);
-        if (!cancelled && text) deps.onSegment({ start: chunk.start, end: chunk.end, text });
+        const heard = isSilent(chunk.audio) ? '' : await runOne(chunk);
+        const seg = toSegment(chunk.start, chunk.end, heard);
+        if (!cancelled && seg.text) deps.onSegment(seg);
       } catch (error) {
         console.error('Klipkord: could not transcribe a chunk', error);
       }

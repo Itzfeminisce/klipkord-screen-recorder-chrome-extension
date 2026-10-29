@@ -1,11 +1,12 @@
 import { guard } from '@/lib/check/guard';
 import { updateRecording } from '@/lib/db';
 import { send } from '@/lib/messages';
-import type { Recording, Segment } from '@/lib/types';
-import { videoStore } from '@/lib/videoStore';
-import { SAMPLE_RATE, chunkAll, createChunker, resample, toMono, type Chunk, type Chunker } from '@/lib/transcribe/chunker';
+import type { Recording, Segment, TranscriptModel } from '@/lib/types';
+import { SAMPLE_RATE, createChunker, resample, type Chunk, type Chunker } from '@/lib/transcribe/chunker';
+import { transcribeAll } from '@/lib/transcribe/full';
 import { transcribeGroq, type TranscriptConfig } from '@/lib/transcribe/groq';
-import { appendSegment, mergeSegments, replaceTranscript } from '@/lib/transcribe/merge';
+import { appendSegment, replaceTranscript } from '@/lib/transcribe/merge';
+import { readVoice } from '@/lib/transcribe/voice';
 import { createQueue, type QueueStatus, type TranscriptPhase, type TranscriptQueue, type TranscriptStatus } from '@/lib/transcribe/queue';
 import { BASE_MODEL, Whisper, liveModel } from '@/lib/transcribe/whisper';
 
@@ -28,6 +29,7 @@ interface Live {
   paused: boolean;
   stopCapture: () => void;
   aborted: boolean;
+  usedLocal: boolean;       // a chunk ran on the live model, so the text is not full quality
 }
 
 let live: Live | null = null;
@@ -103,7 +105,7 @@ export async function startTranscript(recordingId: string, mic: MediaStreamTrack
   const early: Chunk[] = [];
   let queue: TranscriptQueue | null = null;
   const l: Live = {
-    recordingId, config: { ai: 'local', language: 'auto', groqKey: null }, segments: [], phase: 'live', paused: false, aborted: false,
+    recordingId, config: { ai: 'local', language: 'auto', groqKey: null }, segments: [], phase: 'live', paused: false, aborted: false, usedLocal: false,
     stopCapture: () => undefined,
     chunker: createChunker((chunk) => (queue ? queue.add(chunk) : early.push(chunk))),
     get queue() { return queue ?? idleQueue; },
@@ -117,6 +119,7 @@ export async function startTranscript(recordingId: string, mic: MediaStreamTrack
   const model = liveModel(webgpu);
   queue = createQueue({
     local: async (audio) => {
+      l.usedLocal = true;
       await ensureModel(model);
       return whisper!.transcribe(audio, l.config.language);
     },
@@ -180,17 +183,7 @@ async function save(recordingId: string, patch: Partial<Recording>) {
   }
 }
 
-/** Decodes the saved voice track to 16 kHz mono. */
-async function readVoice(recordingId: string): Promise<Float32Array> {
-  const blob = await videoStore.read(recordingId, 'voice');
-  if (!blob.size) return new Float32Array(0);
-  const ctx = new OfflineAudioContext(1, 1, SAMPLE_RATE);
-  const audio = await ctx.decodeAudioData(await blob.arrayBuffer());
-  const channels = Array.from({ length: audio.numberOfChannels }, (_, i) => audio.getChannelData(i));
-  return resample(toMono(channels), audio.sampleRate, SAMPLE_RATE);
-}
-
-/** whisper-base over the whole voice track; null when it cannot run, so the live text stays. */
+/** whisper-base with word times over the whole voice track; null when it cannot run, so the live text stays. */
 async function basePass(l: Live, durationMs: number): Promise<Segment[] | null> {
   if (durationMs > BASE_PASS_MAX_MS) return null;
   try {
@@ -199,17 +192,12 @@ async function basePass(l: Live, durationMs: number): Promise<Segment[] | null> 
     // Downloads base here when the person started recording before ModelDownload fetched it.
     await guard(ensureModel(BASE_MODEL), { ms: BASE_DOWNLOAD_MS, what: 'whisper-base load' });
     let timedOut = false;
-    const run = async () => {
-      const out: Segment[] = [];
-      for (const chunk of chunkAll(voice)) {
-        if (l.aborted || timedOut) return null;
-        const text = await whisper!.transcribe(chunk.audio, l.config.language);
-        out.push({ start: chunk.start, end: chunk.end, text });
-      }
-      return mergeSegments(out);
-    };
+    const run = transcribeAll(voice, {
+      transcribe: (audio) => whisper!.transcribe(audio, l.config.language, true),
+      stopped: () => l.aborted || timedOut,
+    });
     try {
-      return await guard(run(), { ms: baseRunMs(durationMs), what: 'whisper-base pass' });
+      return await guard(run, { ms: baseRunMs(durationMs), what: 'whisper-base pass' });
     } catch (error) {
       timedOut = true;
       throw error;
@@ -237,13 +225,16 @@ export async function finishTranscript(recordingId: string, durationMs: number):
     });
   await save(recordingId, { transcript: l.segments, transcriptPending: true });
   const q = l.queue.status;
+  // Groq for every chunk is already the full model; otherwise only a finished base pass is.
+  let model: TranscriptModel = drained && !l.usedLocal && q.engine === 'groq' ? 'full' : 'live';
   if (drained && !l.aborted && q.engine === 'local') {
     l.phase = 'base';
     report(l);
     const base = await basePass(l, durationMs);
     if (base) l.segments = replaceTranscript(l.segments, base);
+    if (base && l.segments === base) model = 'full';
   }
-  if (!l.aborted) await save(recordingId, { transcript: l.segments, transcriptPending: false });
+  if (!l.aborted) await save(recordingId, { transcript: l.segments, transcriptPending: false, transcriptModel: model });
   l.phase = 'done';
   report(l);
   if (live === l) live = null;

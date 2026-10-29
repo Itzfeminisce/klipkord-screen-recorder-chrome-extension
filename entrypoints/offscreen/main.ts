@@ -253,7 +253,7 @@ async function begin(): Promise<RecorderReply> {
   await putRecording({
     id, title: 'Untitled recording', createdAt: now, duration: 0, status: 'recording',
     mode: state.mode ?? 'tab', quality, height: capturedHeight(videoTrack, streams.video), mime: containerOf(mime), bytes: 0,
-    markers: [], notes: [], comments: [], transcript: [], transcriptPending: false, edits: [],
+    markers: [], notes: [], comments: [], transcript: [], transcriptPending: false, transcriptModel: 'live', edits: [],
   });
   video.start(1000);
   voice?.start(1000);
