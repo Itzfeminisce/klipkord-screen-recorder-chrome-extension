@@ -12,7 +12,7 @@
       .pass { color: #0a6b2d; font-weight: 600; } .fail { color: #b00020; font-weight: 600; }
       .running, .warn { color: #8a5a00; font-weight: 600; }
       p.hint { color: #555; margin: 2px 0 0; font-size: 12px; }
-      #status { margin: 8px 0; min-height: 1.4em; }
+      #status { margin: 8px 0; min-height: 1.4em; white-space: pre-line; }
       #preview canvas { width: 100%; max-width: 960px; background: #000; display: block; }
       #sources { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
       #sources figure { margin: 0; font-size: 12px; color: #555; }
@@ -20,7 +20,7 @@
     </style>
   </head>
   <body>
-    <h1>Klipkord machine check</h1>
+    <h1>Klipkord machine check <small id="build" style="font-weight:600;color:#555;font-size:14px">Build ?</small></h1>
     <p>Run each test, then press Copy results and paste the text where CHECK.md says.</p>
     <button id="copy" type="button">Copy results</button>
     <button id="rerun" type="button" disabled>Run failing tests again</button>

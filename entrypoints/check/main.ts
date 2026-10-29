@@ -1,6 +1,6 @@
 import { TESTS, availabilityOf, emptyResults, errorText, failingTests, numberLines, resultsJson, withResult } from '@/lib/check/results';
 import type { Results, Status, TestId, TestResult, Value } from '@/lib/check/results';
-import { StoppedError, guard, pause } from '@/lib/check/guard';
+import { StoppedError, TimeoutError, cleanupStack, guard, pause, watchdog } from '@/lib/check/guard';
 import { frameStats, levelDb, mean, megabytes, realTimeFactor, round } from '@/lib/check/stats';
 import { builtinAiNote, captureTarget, chromeMajor, soundStatus } from '@/lib/check/verdicts';
 
@@ -18,17 +18,32 @@ const stopStream = (s: MediaStream) => s.getTracks().forEach((t) => t.stop());
 
 let results: Results;
 
-// The one test that is running, with its Stop and optional Skip.
+// Every test runs on its own: its own Stop, its own cleanups, no shared lock.
 interface Run {
   id: TestId;
   signal: AbortSignal;
   numbers: Record<string, Value>;
+  say: (text: string) => void;
+  stage: (name: string) => void;
+  // Registers something to undo when the test ends, is stopped or times out.
+  cleanup: (fn: () => void) => void;
+  // Registers a stream so its tracks (and the camera light) stop when the test ends.
+  stream: (s: MediaStream) => MediaStream;
   setSkip: (label: string | null, skip?: () => void) => void;
 }
-let active: { id: TestId; ctl: AbortController; skipLabel: string | null; skip?: () => void } | null = null;
+interface Live {
+  ctl: AbortController;
+  skipLabel: string | null;
+  skip?: () => void;
+}
+const live = new Map<TestId, Live>();
+const LIMIT_MS: Record<TestId, number> = { mp4: 30_000, sound: 30_000, composite: 120_000, whisper: 15 * 60_000, builtinAi: 30_000 };
+const messages = new Map<string, string>();
 
-function setStatus(text: string) {
-  $('status').textContent = text;
+function setStatus(text: string, key = 'page') {
+  if (text) messages.set(key, text);
+  else messages.delete(key);
+  $('status').textContent = [...messages.values()].join('\n');
 }
 
 function button(text: string, onClick: () => void, disabled = false) {
@@ -53,12 +68,12 @@ function render() {
     hint.textContent = HINTS[t.id];
     name.append(hint);
     const run = document.createElement('td');
-    if (active?.id === t.id) {
-      const ctl = active.ctl;
-      run.append(button('Stop', () => ctl.abort()));
-      if (active.skipLabel && active.skip) run.append(' ', button(active.skipLabel, active.skip));
+    const mine = live.get(t.id);
+    if (mine) {
+      run.append(button('Stop', () => mine.ctl.abort()));
+      if (mine.skipLabel && mine.skip) run.append(' ', button(mine.skipLabel, mine.skip));
     } else {
-      run.append(button(r.status === 'not run' ? 'Run' : 'Run again', () => void runTest(t.id), active !== null));
+      run.append(button(r.status === 'not run' ? 'Run' : 'Run again', () => void runTest(t.id)));
     }
     const status = document.createElement('td');
     status.textContent = r.status;
@@ -72,7 +87,7 @@ function render() {
   }
   const failing = failingTests(results);
   const again = $<HTMLButtonElement>('rerun');
-  again.disabled = active !== null || failing.length === 0;
+  again.disabled = failing.every((id) => live.has(id));
   again.textContent = failing.length ? `Run failing tests again (${failing.length})` : 'Run failing tests again';
   const machine = $('machine');
   machine.replaceChildren();
@@ -100,43 +115,72 @@ const RUNNERS: Record<TestId, (run: Run) => Promise<Status | void>> = {
   builtinAi: testBuiltinAi,
 };
 
-// Resolves false when the owner pressed Stop.
+function failText(error: unknown): string {
+  if (error instanceof StoppedError) return 'Stopped';
+  if (error instanceof TimeoutError) return error.message;
+  return errorText(error);
+}
+
+// Resolves false when the owner pressed Stop. Never blocks, and is blocked by, any other test.
 async function runTest(id: TestId): Promise<boolean> {
-  if (active) return false;
+  if (live.has(id)) return false;
   const ctl = new AbortController();
-  active = { id, ctl, skipLabel: null };
+  const entry: Live = { ctl, skipLabel: null };
+  live.set(id, entry);
+  const cleanups = cleanupStack();
+  const numbers: Record<string, Value> = {};
   const run: Run = {
     id,
     signal: ctl.signal,
-    numbers: {},
+    numbers,
+    say: (text) => setStatus(text, id),
+    stage: (name) => {
+      numbers.stage = name;
+      if (live.get(id) === entry) update(id, { status: 'running', numbers: { ...numbers } });
+    },
+    cleanup: cleanups.add,
+    stream: (stream) => {
+      cleanups.add(() => stopStream(stream));
+      return stream;
+    },
     setSkip: (label, skip) => {
-      if (active?.ctl !== ctl) return;
-      active.skipLabel = label;
-      active.skip = skip;
+      if (live.get(id) !== entry) return;
+      entry.skipLabel = label;
+      entry.skip = skip;
       render();
     },
   };
   update(id, { status: 'running', numbers: {} });
   let stopped = false;
+  let outcome: { status: Status } | { error: unknown };
   try {
-    const status = (await RUNNERS[id](run)) ?? 'pass';
-    active = null;
-    update(id, { status, numbers: run.numbers, ranAt: new Date().toISOString() });
-    setStatus(status === 'pass' ? 'Done.' : 'Done, with a warning. See the numbers.');
+    outcome = { status: (await watchdog(() => RUNNERS[id](run), { ms: LIMIT_MS[id], ctl })) ?? 'pass' };
   } catch (error) {
-    stopped = error instanceof StoppedError;
-    if (!stopped) console.error(`Klipkord: could not run check ${id}`, error);
-    active = null;
-    update(id, { status: 'fail', numbers: run.numbers, error: errorText(error), ranAt: new Date().toISOString() });
-    setStatus(stopped ? 'Stopped.' : 'Test failed. The error is in the table.');
+    outcome = { error };
+  }
+  // Teardown runs even when the test's own code is still stuck on an await.
+  ctl.abort();
+  cleanups.run((e) => console.error(`Klipkord: cleanup after check ${id} failed`, e));
+  live.delete(id);
+  setStatus('', id);
+  const ranAt = new Date().toISOString();
+  if ('status' in outcome) {
+    update(id, { status: outcome.status, numbers, ranAt });
+    setStatus(outcome.status === 'pass' ? `${nameOf(id)}: done.` : `${nameOf(id)}: done, with a warning. See the numbers.`);
+  } else {
+    stopped = outcome.error instanceof StoppedError;
+    if (!stopped) console.error(`Klipkord: could not run check ${id}`, outcome.error);
+    update(id, { status: 'fail', numbers, error: failText(outcome.error), ranAt });
+    setStatus(stopped ? `${nameOf(id)}: stopped.` : `${nameOf(id)}: failed. The error is in the table.`);
   }
   return !stopped;
 }
 
-async function rerunFailing() {
-  for (const id of failingTests(results)) {
-    if (!(await runTest(id))) return;
-  }
+const nameOf = (id: TestId) => TESTS.find((t) => t.id === id)!.name;
+
+// Starts every failing test at once; one stuck test cannot hold back the others.
+function rerunFailing() {
+  for (const id of failingTests(results)) void runTest(id);
 }
 
 async function machineInfo(): Promise<Record<string, Value>> {
@@ -204,9 +248,12 @@ function animatedSource(): { stream: MediaStream; stop: () => void } {
   osc.connect(dest);
   osc.start();
   const stream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  let stopped = false;
   return {
     stream,
     stop: () => {
+      if (stopped) return;
+      stopped = true;
       clearInterval(timer);
       osc.stop();
       void audio.close();
@@ -226,12 +273,13 @@ function startRecorder(recorder: MediaRecorder, onData: (b: Blob) => void) {
   };
 }
 
-async function record(stream: MediaStream, mimeType: string, ms: number, signal: AbortSignal): Promise<{ bytes: number; type: string }> {
+async function record(run: Run, stream: MediaStream, mimeType: string, ms: number): Promise<{ bytes: number; type: string }> {
   const recorder = new MediaRecorder(stream, { mimeType });
   const chunks: Blob[] = [];
   const stop = startRecorder(recorder, (b) => chunks.push(b));
+  run.cleanup(() => recorder.state !== 'inactive' && recorder.stop());
   try {
-    await pause(ms, signal);
+    await pause(ms, run.signal);
   } finally {
     await stop().catch(() => undefined);
   }
@@ -239,14 +287,16 @@ async function record(stream: MediaStream, mimeType: string, ms: number, signal:
   return { bytes: blob.size, type: recorder.mimeType };
 }
 
-async function testMp4({ numbers, signal }: Run) {
+async function testMp4(run: Run) {
+  const { numbers } = run;
   for (const [k, t] of Object.entries(TYPES)) numbers[`supported.${k}`] = MediaRecorder.isTypeSupported(t);
   const mp4 = [TYPES.mp4H264Aac, TYPES.mp4H264AacHigh, TYPES.mp4Plain].find((t) => MediaRecorder.isTypeSupported(t));
   const src = animatedSource();
+  run.cleanup(src.stop);
   try {
     if (mp4) {
-      setStatus('Recording 10 s as MP4...');
-      const r = await record(src.stream, mp4, 10_000, signal);
+      run.say('Recording 10 s as MP4...');
+      const r = await record(run, src.stream, mp4, 10_000);
       numbers['mp4.requested'] = mp4;
       numbers['mp4.type'] = r.type;
       numbers['mp4.bytes'] = r.bytes;
@@ -254,8 +304,8 @@ async function testMp4({ numbers, signal }: Run) {
       numbers['mp4.requested'] = null;
     }
     if (MediaRecorder.isTypeSupported(TYPES.webmVp9Opus)) {
-      setStatus('Recording 10 s as WebM...');
-      const r = await record(src.stream, TYPES.webmVp9Opus, 10_000, signal);
+      run.say('Recording 10 s as WebM...');
+      const r = await record(run, src.stream, TYPES.webmVp9Opus, 10_000);
       numbers['webm.type'] = r.type;
       numbers['webm.bytes'] = r.bytes;
     }
@@ -295,17 +345,19 @@ function desktopStream(id: string, audio: boolean, signal: AbortSignal): Promise
   return guard(stream, { ms: 30_000, what: 'Screen capture', signal, dispose: stopStream });
 }
 
-async function testSound({ numbers, signal }: Run): Promise<Status> {
+async function testSound(run: Run): Promise<Status> {
+  const { numbers, signal } = run;
   const pick = await chooseScreen(['screen', 'window', 'tab', 'audio'], signal);
-  const stream = await desktopStream(pick.id, true, signal);
+  const stream = run.stream(await desktopStream(pick.id, true, signal));
   const track = stream.getAudioTracks()[0];
   numbers.canRequestAudioTrack = pick.canRequestAudioTrack;
   numbers.audioTrack = Boolean(track);
   numbers.audioTrackLabel = track?.label ?? null;
   const ctx = new AudioContext();
+  run.cleanup(() => void ctx.close().catch(() => undefined));
   try {
     if (!track) return 'fail';
-    setStatus('Listening for 10 s. Keep the video with sound playing...');
+    run.say('Listening for 10 s. Keep the video with sound playing...');
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
     ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser);
@@ -327,13 +379,13 @@ async function testSound({ numbers, signal }: Run): Promise<Status> {
     if (status === 'warn') numbers.note = 'too quiet: play a video with sound before you press Run';
     return status;
   } finally {
-    void ctx.close();
+    void ctx.close().catch(() => undefined);
     stopStream(stream);
   }
 }
 
 // Videos stay in the page as small previews; Chrome only delivers frames to attached, visible videos.
-async function playing(stream: MediaStream, label: string, signal: AbortSignal): Promise<HTMLVideoElement> {
+async function playing(run: Run, stream: MediaStream, label: string): Promise<HTMLVideoElement> {
   const figure = document.createElement('figure');
   const video = document.createElement('video');
   video.muted = true;
@@ -343,7 +395,11 @@ async function playing(stream: MediaStream, label: string, signal: AbortSignal):
   caption.textContent = label;
   figure.append(video, caption);
   $('sources').append(figure);
-  await guard(video.play(), { ms: 10_000, what: `${label} video`, signal });
+  run.cleanup(() => {
+    video.srcObject = null;
+    figure.remove();
+  });
+  await guard(video.play(), { ms: 10_000, what: `${label} video`, signal: run.signal });
   return video;
 }
 
@@ -355,25 +411,33 @@ function trackFrames(video: HTMLVideoElement, times: number[], until: () => bool
   video.requestVideoFrameCallback(cb);
 }
 
-async function testComposite({ numbers, signal }: Run) {
-  const pick = await chooseScreen(['screen', 'window'], signal);
-  const streams: MediaStream[] = [];
+async function testComposite(run: Run) {
+  const { numbers, signal } = run;
   const preview = $('preview');
   const out = $<HTMLCanvasElement>('composite');
   let done = false;
   let timer: ReturnType<typeof setInterval> | undefined;
-  let stopRecorder: (() => Promise<void>) | undefined;
-  try {
-    const screenStream = await desktopStream(pick.id, false, signal);
-    streams.push(screenStream);
-    setStatus('Waiting for the camera. Allow it if Chrome asks...');
+  let recorder: MediaRecorder | undefined;
+  run.cleanup(() => {
+    done = true;
+    clearInterval(timer);
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+    $('sources').replaceChildren();
+    preview.hidden = true;
+  });
+  {
+    run.stage('screen-picker');
+    const pick = await chooseScreen(['screen', 'window'], signal);
+    const screenStream = run.stream(await desktopStream(pick.id, false, signal));
+    run.stage('camera');
+    run.say('Waiting for the camera. Allow it if Chrome asks...');
     const cameraStream = await guard(navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 30 } }), {
       ms: 60_000,
       what: 'Camera',
       signal,
       dispose: stopStream,
     });
-    streams.push(cameraStream);
+    run.stream(cameraStream);
 
     const real = { width: Math.round(screen.width * devicePixelRatio), height: Math.round(screen.height * devicePixelRatio) };
     const { width: W, height: H } = captureTarget(real);
@@ -388,9 +452,10 @@ async function testComposite({ numbers, signal }: Run) {
     const ctx = out.getContext('2d', { alpha: false })!;
     preview.hidden = false;
     preview.scrollIntoView({ block: 'start' });
-    setStatus('Starting the preview...');
-    const screenVideo = await playing(screenStream, 'Screen', signal);
-    const cameraVideo = await playing(cameraStream, 'Camera', signal);
+    run.say('Starting the preview...');
+    const screenVideo = await playing(run, screenStream, 'Screen');
+    const cameraVideo = await playing(run, cameraStream, 'Camera');
+    run.stage('drawing');
 
     const drawMs: number[] = [];
     const bubble = Math.round(H * 0.26);
@@ -428,26 +493,26 @@ async function testComposite({ numbers, signal }: Run) {
     timer = setInterval(draw, 1000 / 30);
     draw();
     const outStream = out.captureStream(30);
-    streams.push(outStream);
-    const outVideo = await playing(outStream, 'Recorded stream', signal);
+    run.stream(outStream);
+    const outVideo = await playing(run, outStream, 'Recorded stream');
 
     const screenTimes: number[] = [];
     const outTimes: number[] = [];
     trackFrames(screenVideo, screenTimes, () => done);
     trackFrames(outVideo, outTimes, () => done);
     const recorderType = MediaRecorder.isTypeSupported(TYPES.mp4H264Aac) ? 'video/mp4;codecs=avc1.42E01E' : 'video/webm;codecs=vp9';
-    const recorder = new MediaRecorder(outStream, { mimeType: recorderType, videoBitsPerSecond: 8_000_000 });
+    run.stage('recording');
+    recorder = new MediaRecorder(outStream, { mimeType: recorderType, videoBitsPerSecond: 8_000_000 });
     let bytes = 0;
-    stopRecorder = startRecorder(recorder, (b) => (bytes += b.size));
+    const stopRecorder = startRecorder(recorder, (b) => (bytes += b.size));
 
     for (let s = 60; s > 0; s--) {
-      setStatus(`Compositing and recording at ${W}x${H}... ${s} s left`);
+      run.say(`Compositing and recording at ${W}x${H}... ${s} s left`);
       await pause(1000, signal);
     }
     done = true;
     clearInterval(timer);
     await stopRecorder();
-    stopRecorder = undefined;
 
     const outStats = frameStats(outTimes, 30);
     const screenStats = frameStats(screenTimes, 30);
@@ -461,13 +526,7 @@ async function testComposite({ numbers, signal }: Run) {
     numbers.drawError = drawError;
     numbers.recorderType = recorder.mimeType;
     numbers.recordedMb = megabytes(bytes);
-  } finally {
-    done = true;
-    clearInterval(timer);
-    await stopRecorder?.().catch(() => undefined);
-    streams.forEach(stopStream);
-    $('sources').replaceChildren();
-    preview.hidden = true;
+    run.stage('done');
   }
 }
 
@@ -510,14 +569,17 @@ class WhisperWorker {
   }
 }
 
-async function recordMic(onChunk: (chunk: Float32Array, index: number) => void, signal: AbortSignal): Promise<void> {
+async function recordMic(run: Run, onChunk: (chunk: Float32Array, index: number) => void): Promise<void> {
+  const { signal } = run;
   const stream = await guard(navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } }), {
     ms: MINUTE,
     what: 'Microphone',
     signal,
     dispose: stopStream,
   });
+  run.stream(stream);
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  run.cleanup(() => void ctx.close().catch(() => undefined));
   const source = ctx.createMediaStreamSource(stream);
   // ScriptProcessor keeps this check to one file; T1 can move to an AudioWorklet.
   const node = ctx.createScriptProcessor(4096, 1, 1);
@@ -552,12 +614,12 @@ async function recordMic(onChunk: (chunk: Float32Array, index: number) => void, 
     node.disconnect();
     source.disconnect();
     stopStream(stream);
-    void ctx.close();
+    void ctx.close().catch(() => undefined);
   }
 }
 
 async function loadModel(worker: WhisperWorker, model: string, key: string, run: Run, signal = run.signal) {
-  setStatus(`Loading ${model} (first run downloads it)...`);
+  run.say(`Loading ${model} (first run downloads it)...`);
   const m = await worker.send({ type: 'load', model: `onnx-community/${model}` }, { ms: 15 * MINUTE, what: `Loading ${model}`, signal });
   const n = run.numbers;
   n[`${key}.model`] = `onnx-community/${model}`;
@@ -585,7 +647,7 @@ async function transcribeAll(worker: WhisperWorker, model: string, key: string, 
   const words: number[] = [];
   try {
     for (const [i, chunk] of chunks.entries()) {
-      setStatus(`${model}: chunk ${i + 1} of ${chunks.length}...`);
+      run.say(`${model}: chunk ${i + 1} of ${chunks.length}...`);
       const m = await worker.send({ type: 'transcribe', id: i, audio: chunk.slice() }, { ms: 5 * MINUTE, what: `${model} chunk ${i + 1}`, signal });
       ms.push(Number(m.ms));
       words.push(Number(m.words));
@@ -601,21 +663,22 @@ async function testWhisper(run: Run) {
   numbers.audioS = CHUNK_S * CHUNKS;
   numbers.cores = navigator.hardwareConcurrency ?? null;
   const worker = new WhisperWorker();
+  run.cleanup(() => worker.terminate());
   try {
     // whisper-tiny transcribes live while the mic records; base and small then run on the same chunks.
     await loadModel(worker, 'whisper-tiny', 'tiny', run);
     const chunks: Float32Array[] = [];
     const pending: Promise<Record<string, unknown>>[] = [];
-    setStatus('Recording 2 minutes from the microphone. Talk or play speech...');
-    await recordMic((chunk, i) => {
+    run.say('Recording 2 minutes from the microphone. Talk or play speech...');
+    await recordMic(run, (chunk, i) => {
       chunks.push(chunk);
-      setStatus(`Recording... chunk ${i + 1} of ${CHUNKS}`);
+      run.say(`Recording... chunk ${i + 1} of ${CHUNKS}`);
       const answer = worker.send({ type: 'transcribe', id: i, audio: chunk.slice() }, { ms: 15 * MINUTE, what: `whisper-tiny chunk ${i + 1}`, signal });
       // A stop rejects every queued chunk; Promise.all below reports the first one.
       answer.catch(() => undefined);
       pending.push(answer);
-    }, signal);
-    setStatus('Finishing whisper-tiny...');
+    });
+    run.say('Finishing whisper-tiny...');
     const tinyDone = await Promise.all(pending);
     chunkStats(
       tinyDone.map((m) => Number(m.ms)),
@@ -650,14 +713,14 @@ async function testWhisper(run: Run) {
 
 // --- 5. Built-in AI ---
 
-async function testBuiltinAi({ numbers }: Run): Promise<Status> {
+async function testBuiltinAi({ numbers, signal }: Run): Promise<Status> {
   const g = globalThis as unknown as Record<string, { availability?: () => Promise<unknown> } | undefined>;
   const version = typeof results.machine.chrome === 'string' ? results.machine.chrome : navigator.userAgent;
   numbers.chrome = typeof results.machine.chrome === 'string' ? results.machine.chrome : (/Chrome\/([\d.]+)/.exec(navigator.userAgent)?.[1] ?? null);
   const found: string[] = [];
   for (const name of ['Summarizer', 'LanguageModel']) {
     try {
-      const a = availabilityOf(await guard(g[name]?.availability?.() ?? Promise.resolve(undefined), { ms: 30_000, what: name }));
+      const a = availabilityOf(await guard(g[name]?.availability?.() ?? Promise.resolve(undefined), { ms: 30_000, what: name, signal }));
       numbers[name] = a;
       found.push(a);
     } catch (error) {
@@ -679,9 +742,17 @@ $('copy').addEventListener('click', async () => {
     setStatus('Could not copy. Select the table text instead.');
   }
 });
-$('rerun').addEventListener('click', () => void rerunFailing());
+$('rerun').addEventListener('click', rerunFailing);
 
-results = emptyResults({}, new Date());
+const BUILD = (() => {
+  try {
+    return chrome.runtime.getManifest().version || 'dev';
+  } catch {
+    return 'dev';
+  }
+})();
+$('build').textContent = `Build ${BUILD}`;
+results = emptyResults({}, new Date(), BUILD);
 render();
 void machineInfo().then((machine) => {
   results = { ...results, machine };

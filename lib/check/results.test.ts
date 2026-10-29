@@ -10,6 +10,13 @@ describe('results', () => {
     expect(JSON.parse(resultsJson(r)).machine.cores).toBe(8);
   });
 
+  it('puts the build first in the copied JSON', () => {
+    const json = resultsJson(emptyResults({}, now, '0.0.3'));
+    expect(JSON.parse(json).build).toBe('0.0.3');
+    expect(Object.keys(JSON.parse(json))[0]).toBe('build');
+    expect(emptyResults({}, now).build).toBe('dev');
+  });
+
   it('replaces one test without touching others', () => {
     const r = emptyResults({}, now);
     const next = withResult(r, 'mp4', { status: 'pass', numbers: { bytes: 10 } }, now);

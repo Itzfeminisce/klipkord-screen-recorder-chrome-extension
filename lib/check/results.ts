@@ -12,6 +12,7 @@ export interface TestResult {
 }
 
 export interface Results {
+  build: string;
   app: 'klipkord';
   check: 'T0';
   ranAt: string;
@@ -27,10 +28,10 @@ export const TESTS: { id: TestId; name: string }[] = [
   { id: 'builtinAi', name: '5. Built-in AI' },
 ];
 
-export function emptyResults(machine: Record<string, Value>, now: Date): Results {
+export function emptyResults(machine: Record<string, Value>, now: Date, build = 'dev'): Results {
   const tests = {} as Record<TestId, TestResult>;
   for (const t of TESTS) tests[t.id] = { status: 'not run', numbers: {} };
-  return { app: 'klipkord', check: 'T0', ranAt: now.toISOString(), machine, tests };
+  return { build, app: 'klipkord', check: 'T0', ranAt: now.toISOString(), machine, tests };
 }
 
 const finished = (s: Status) => s === 'pass' || s === 'warn' || s === 'fail';
