@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { getRecording } from '@/lib/db';
 import {
-  PROBE_SEEK_SECONDS, chapterAt, formatLength, mapTime, needsDurationProbe, percentOf, saveComments, sortComments, timeAtPoint, videoSeconds,
+  PROBE_SEEK_SECONDS, chapterAt, formatLength, needsDurationProbe, percentOf, saveComments, sortComments, timeAtPoint,
 } from '@/lib/comments';
+import { playable } from '@/lib/editList';
 import { MARKER_LABEL } from '@/lib/markers';
 import { formatClock } from '@/lib/time';
 import { videoStore } from '@/lib/videoStore';
@@ -94,6 +95,7 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
   const pending = useRef<number | null>(route.params.atMs ? route.params.atMs / 1000 : null);
   const probing = useRef(false);
   const edits = rec?.edits ?? [];
+  const length = rec && rec.duration > 0 ? rec.duration : Infinity;
 
   useEffect(() => {
     if (!id) return;
@@ -141,24 +143,23 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
     const v = video.current;
     if (!v || probing.current) return;
     const ms = v.currentTime * 1000;
-    const mapped = mapTime(edits, ms);
-    if (mapped !== ms) {
+    const { at, ended } = playable(edits, length, ms);
+    if (at !== ms) {
       // Inside a cut part: jump to the next kept part, or stop at the end.
-      const last = edits.length ? Math.max(...edits.map((r) => r.end)) : 0;
-      if (ms >= last) v.pause();
-      v.currentTime = mapped / 1000;
+      if (ended) v.pause();
+      v.currentTime = at / 1000;
     }
-    setNow(mapped);
+    setNow(at);
   };
 
   const seek = useCallback((ms: number) => {
     const v = video.current;
-    const mapped = mapTime(edits, ms);
+    const mapped = Math.max(0, playable(edits, length, ms).at);
     setNow(mapped);
     if (!v) { pending.current = mapped / 1000; return; }
     if (probing.current || v.readyState === 0) { pending.current = mapped / 1000; return; }
-    v.currentTime = videoSeconds(edits, ms, v.duration);
-  }, [edits]);
+    v.currentTime = Number.isFinite(v.duration) && v.duration > 0 ? Math.min(mapped / 1000, v.duration) : mapped / 1000;
+  }, [edits, length]);
 
   function toggle() {
     const v = video.current;
