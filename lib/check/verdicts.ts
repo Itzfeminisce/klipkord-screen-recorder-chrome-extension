@@ -31,3 +31,11 @@ export function captureTarget(screenSize: Size, max: Size = { width: 1920, heigh
   const even = (n: number) => Math.max(2, Math.floor((n * scale) / 2) * 2);
   return { width: even(screenSize.width), height: even(screenSize.height) };
 }
+
+export const SMALL_MAX_BASE_RTF = 0.5;
+
+// whisper-small runs only when whisper-base was clearly faster than real time; otherwise the note says why not.
+export function smallSkipNote(baseRtf: number | null): string | null {
+  if (baseRtf === null) return 'skipped: no whisper-base realTimeFactor';
+  return baseRtf < SMALL_MAX_BASE_RTF ? null : `skipped: whisper-base realTimeFactor ${baseRtf} is not below ${SMALL_MAX_BASE_RTF}`;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { frameStats, levelDb, mean, megabytes, realTimeFactor } from './stats';
+import { downloadSummary, frameStats, levelDb, mean, megabytes, realTimeFactor } from './stats';
 
 describe('frameStats', () => {
   it('reports steady 30 fps with no drops', () => {
@@ -32,5 +32,21 @@ describe('numbers', () => {
     expect(levelDb(new Float32Array([]))).toBeNull();
     expect(levelDb(new Float32Array([1, -1]))).toBe(0);
     expect(levelDb(new Float32Array([0.1, -0.1]))).toBe(-20);
+  });
+});
+
+describe('downloadSummary', () => {
+  it('sums partial files and is not done', () => {
+    const s = downloadSummary([
+      { loaded: 5, total: 10, done: false },
+      { loaded: 20, total: 20, done: true },
+    ]);
+    expect(s).toEqual({ files: 2, doneFiles: 1, loadedBytes: 25, totalBytes: 30, allDone: false });
+  });
+  it('is done when every file is done', () => {
+    expect(downloadSummary([{ loaded: 0, total: 7, done: true }])).toMatchObject({ loadedBytes: 7, allDone: true });
+  });
+  it('is not done with no files', () => {
+    expect(downloadSummary([]).allDone).toBe(false);
   });
 });

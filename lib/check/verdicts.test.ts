@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { builtinAiNote, captureTarget, chromeMajor, soundStatus } from './verdicts';
+import { builtinAiNote, captureTarget, chromeMajor, smallSkipNote, soundStatus } from './verdicts';
 
 describe('soundStatus', () => {
   it('warns on silence and near-silence', () => {
@@ -43,5 +43,18 @@ describe('captureTarget', () => {
   });
   it('rounds to even sizes', () => {
     expect(captureTarget({ width: 1365, height: 767 })).toEqual({ width: 1364, height: 766 });
+  });
+});
+
+describe('smallSkipNote', () => {
+  it('runs small when base is fast', () => {
+    expect(smallSkipNote(0.3)).toBeNull();
+  });
+  it('skips small at or above the limit, with a note', () => {
+    expect(smallSkipNote(0.5)).toContain('0.5');
+    expect(smallSkipNote(1.2)).toContain('skipped');
+  });
+  it('skips small with no base number', () => {
+    expect(smallSkipNote(null)).toContain('skipped');
   });
 });
