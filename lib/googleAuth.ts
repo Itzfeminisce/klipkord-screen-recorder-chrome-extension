@@ -1,7 +1,9 @@
 /** Google sign-in for Drive links: implicit-flow token through launchWebAuthFlow, kept only in chrome.storage.session. */
 
 // Public OAuth client id (O2), set at build time; empty until the owner creates the client.
-export const GOOGLE_CLIENT_ID: string = (import.meta.env.WXT_GOOGLE_CLIENT_ID as string | undefined) ?? '';
+// Klipkord's Google OAuth client (Web application, redirect https://iapgbifdchhmidblniddncnagghloepi.chromiumapp.org/). It is public.
+const KLIPKORD_CLIENT_ID = '503949808619-n8mcagtmqju38elphh5i9sjm3jpan37h.apps.googleusercontent.com';
+export const GOOGLE_CLIENT_ID: string = (import.meta.env.WXT_GOOGLE_CLIENT_ID as string | undefined) || KLIPKORD_CLIENT_ID;
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 export const GOOGLE_ORIGINS = ['https://www.googleapis.com/*'];
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
