@@ -24,6 +24,7 @@ export type ScreenName =
   | 'Cleanup'
   | 'Export'
   | 'GifClip'
+  | 'DriveLink'
   | 'Saved'
   | 'Library'
   | 'LibraryEmpty'

@@ -5,24 +5,14 @@ import type { Recording } from '../types';
 import { videoStore } from '../videoStore';
 import { sniff, type AudioTrack, type Container, type Demuxer, type Packet, type Tracks, type VideoTrack } from './demux';
 import { createMp4Demuxer } from './mp4';
-import { KEY_FRAME_EVERY_US, audioSlices, editedMicros, encodePlan, opensPart, targetBitrate } from './plan';
+import { AUDIO_CODECS, KEY_FRAME_EVERY_US, VIDEO_CODECS, audioSlices, editedMicros, encodePlan, opensPart, targetBitrate } from './plan';
 import { createWebmDemuxer } from './webm';
+
+export { needsEncode } from './plan';
 
 const CHUNK_BYTES = 2 * 1024 * 1024;
 // Few frames wait in either queue, so memory stays flat however long the recording is.
 const MAX_QUEUE = 6;
-
-const VIDEO_CODECS: Record<Container, { codec: string; mux: string }[]> = {
-  mp4: [
-    { codec: 'avc1.640034', mux: 'avc' }, { codec: 'avc1.4d0034', mux: 'avc' }, { codec: 'avc1.42e034', mux: 'avc' },
-    { codec: 'avc1.640028', mux: 'avc' }, { codec: 'avc1.42e01f', mux: 'avc' }, { codec: 'vp09.00.40.08', mux: 'vp9' },
-  ],
-  webm: [{ codec: 'vp09.00.40.08', mux: 'V_VP9' }, { codec: 'vp8', mux: 'V_VP8' }],
-};
-const AUDIO_CODECS: Record<Container, { codec: string; mux: string }[]> = {
-  mp4: [{ codec: 'mp4a.40.2', mux: 'aac' }, { codec: 'opus', mux: 'opus' }],
-  webm: [{ codec: 'opus', mux: 'A_OPUS' }],
-};
 
 export interface EncodeDeps { read: (rec: Recording) => Promise<Blob> }
 const defaultDeps: EncodeDeps = { read: (rec) => videoStore.read(rec.id, 'video', rec.mime) };
@@ -40,17 +30,19 @@ async function firstSupported<C extends VideoEncoderConfig | AudioEncoderConfig>
 }
 
 /**
- * Re-encodes only the kept parts of a recording into a new MP4 or WebM (same container as the original).
+ * Re-encodes only the kept parts of a recording into a new MP4 or WebM (`to`, by default the original's container).
  * Frames stream from the stored file through WebCodecs one by one; the original is never changed.
  */
-export async function encodeKept(rec: Recording, onProgress: (share: number) => void, signal?: AbortSignal, deps: EncodeDeps = defaultDeps): Promise<Blob> {
+export async function encodeKept(
+  rec: Recording, onProgress: (share: number) => void, signal?: AbortSignal, to?: Container, deps: EncodeDeps = defaultDeps,
+): Promise<Blob> {
   if (signal?.aborted) throw aborted();
   const source = await deps.read(rec);
   if (source.size === 0) throw new Error('The recording has no video');
   const sniffed = sniff(new Uint8Array(await source.slice(0, 16).arrayBuffer()));
   if (!sniffed) throw new Error('The recording is not an MP4 or WebM file');
-  const container: Container = sniffed;
-  const demuxer: Demuxer = container === 'mp4' ? createMp4Demuxer() : createWebmDemuxer();
+  const demuxer: Demuxer = sniffed === 'mp4' ? createMp4Demuxer() : createWebmDemuxer();
+  const container: Container = to ?? sniffed;
 
   const plan = encodePlan(rec.edits, rec.duration);
   const totalUs = Math.max(1, (rec.duration > 0 ? editedLength(rec.edits, rec.duration) : 1) * 1000);

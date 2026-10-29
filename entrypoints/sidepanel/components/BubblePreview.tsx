@@ -97,7 +97,6 @@ const chosen = (on: boolean): CSSProperties => (on ? { background: '#FFFFFF', bo
 export function BubbleControls({ bubble, onChange }: { bubble: Bubble; onChange: (patch: Partial<Bubble>) => void }) {
   return (
     <div style={{ margin: '10px 24px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ fontSize: 12, color: '#5F6168' }}>Bubble</span>
       <div role="radiogroup" aria-label="Bubble corner" style={{ ...GROUP, gap: 4 }}>
         {CORNERS.map((corner) => {
           const on = bubble.corner === corner;

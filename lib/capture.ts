@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { send, type Message, type MessageOf } from './messages';
 import { IDLE, type RecorderState } from './recorder';
+import type { RecordedSource } from './sourceChip';
 import type { CaptureMode, Quality } from './types';
 
 export const RECORDER_PATH = '/offscreen.html';
@@ -78,7 +79,13 @@ export async function prepareRecorder(msg: Omit<MessageOf<'recorder/prepare'>, '
   try {
     const reply = await command({ type: 'recorder/prepare', ...msg });
     // The picker does not say which tab was chosen; the tab the person came from is the one shown.
-    if (reply.ok && msg.mode === 'tab' && previous?.title) await browser.storage.session.set({ [SOURCE_KEY]: { title: previous.title, url: previous.url ?? '' } }).catch(() => undefined);
+    if (reply.ok) {
+      const source: RecordedSource | null =
+        msg.mode === 'tab' ? (previous?.title || previous?.url ? { kind: 'tab', title: previous.title ?? '', url: previous.url ?? '', favIconUrl: previous.favIconUrl || undefined } : null)
+        : msg.mode === 'window' ? { kind: 'window', label: reply.label ?? '' }
+        : { kind: 'screen', label: reply.label };
+      await (source ? browser.storage.session.set({ [SOURCE_KEY]: source }) : browser.storage.session.remove(SOURCE_KEY)).catch(() => undefined);
+    }
     return reply;
   } finally {
     if (previous?.id !== undefined && previous.id !== recorder.id) {
@@ -88,7 +95,8 @@ export async function prepareRecorder(msg: Omit<MessageOf<'recorder/prepare'>, '
   }
 }
 
-export interface RecorderReply { ok: boolean; error?: string; cancelled?: boolean }
+/** `label` is the picked video track's label, which names a window. */
+export interface RecorderReply { ok: boolean; error?: string; cancelled?: boolean; label?: string }
 
 /** Sends a command to the recorder tab and waits for its answer. */
 export async function command(msg: Message): Promise<RecorderReply> {
@@ -159,18 +167,9 @@ export function onStartRequest(cb: () => void): () => void {
   return () => browser.storage.onChanged.removeListener(listener);
 }
 
-/** "Tab: <page title> · <site>" for a tab recording; the mode's own label for a window or the screen. */
-export function sourceLabel(mode: CaptureMode | undefined, modeLabel: string, source: { title: string; url: string } | null): string {
-  if (!mode) return '';
-  if (mode !== 'tab' || !source) return modeLabel;
-  let site = '';
-  try { site = new URL(source.url).hostname.replace(/^www\./, ''); } catch { /* no site */ }
-  return `Tab: ${source.title}${site ? ` · ${site}` : ''}`;
-}
-
-/** The tab being recorded, as saved when the picker closed; null until read. */
-export function useRecordedTab(): { title: string; url: string } | null {
-  const [source, setSource] = useState<{ title: string; url: string } | null>(null);
+/** What is being recorded, as saved when the picker closed; null until read. */
+export function useRecordedSource(): RecordedSource | null {
+  const [source, setSource] = useState<RecordedSource | null>(null);
   useEffect(() => {
     browser.storage.session.get(SOURCE_KEY).then((s) => setSource((s[SOURCE_KEY] as typeof source) ?? null), () => undefined);
     const listener = (changes: Record<string, Browser.storage.StorageChange>, area: string) => {
