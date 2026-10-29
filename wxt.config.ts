@@ -1,13 +1,24 @@
 import { defineConfig } from 'wxt';
 
+// A stable extension ID fixes the Penv Cloud redirect URL; set WXT_EXTENSION_KEY for release builds.
+const extensionKey = process.env.WXT_EXTENSION_KEY || undefined;
+
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
+    ...(extensionKey ? { key: extensionKey } : {}),
     name: 'Klipkord',
     description: 'Screen recorder in the Chrome side panel',
-    permissions: ['sidePanel', 'offscreen', 'desktopCapture', 'storage', 'unlimitedStorage'],
-    // Requested only when the user turns on Penv Cloud, Groq or Ollama.
-    optional_host_permissions: ['https://penv.cloud/*', 'https://api.groq.com/*', 'http://localhost:11434/*'],
+    permissions: ['sidePanel', 'offscreen', 'desktopCapture', 'storage', 'unlimitedStorage', 'identity'],
+    // Requested only when the user turns on Penv Cloud, a cloud key or Ollama.
+    optional_host_permissions: [
+      'https://penv.cloud/*',
+      'https://api.groq.com/*',
+      'https://openrouter.ai/*',
+      'https://api.openai.com/*',
+      'https://api.anthropic.com/*',
+      'http://localhost:11434/*',
+    ],
     action: { default_title: 'Open Klipkord' },
     commands: {
       'toggle-recording': { suggested_key: { default: 'Alt+Shift+R' }, description: 'Start or stop recording' },

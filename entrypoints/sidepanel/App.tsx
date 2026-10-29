@@ -1,5 +1,7 @@
 import { useEffect, useState, type ComponentType } from 'react';
-import { listUnfinished } from '@/lib/db';
+import { listRecordings, listUnfinished } from '@/lib/db';
+import { getSettings } from '@/lib/settings';
+import { isFirstRun } from '@/lib/setup';
 import { Spinner } from './components';
 import { RouterProvider, useRouter, type Route, type ScreenName } from './router';
 import Main from './screens/Main';
@@ -62,13 +64,19 @@ export const SCREENS: Record<ScreenName, ComponentType> = {
   StatesSetup,
 };
 
-/** First screen: Recovered when an unfinished recording is waiting, otherwise Main. */
+/** First screen: Recovered when an unfinished recording is waiting, Main (welcome) on first run, otherwise Home. */
 export async function initialRoute(): Promise<Route> {
   try {
     const [unfinished] = await listUnfinished();
     if (unfinished) return { screen: 'Recovered', params: { recordingId: unfinished.id } };
   } catch (error) {
     console.error('Klipkord: could not check for unfinished recordings', error);
+  }
+  try {
+    const [settings, recordings] = await Promise.all([getSettings(), listRecordings()]);
+    if (!isFirstRun(settings, recordings.length)) return { screen: 'Home', params: {} };
+  } catch (error) {
+    console.error('Klipkord: could not check for first run', error);
   }
   return { screen: 'Main', params: {} };
 }

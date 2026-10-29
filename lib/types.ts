@@ -18,6 +18,7 @@ export interface Settings {
   bubble: { corner: Corner; size: BubbleSize };        // default bottom-left, M
   defaultStyle?: NoteStyle;                            // "Always use this style": skips detection
   folderName?: string;                                 // handle itself kept in IndexedDB
+  onboarded?: boolean;                                 // set once the first-run AI choice is made (T2)
 }
 
 export interface Marker { id: string; at: number; kind: MarkerKind }            // at = ms into the recording
