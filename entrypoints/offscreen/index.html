@@ -19,6 +19,14 @@
       li svg { color: #15803D; }
       .note { font-size: 13px; line-height: 1.5; color: #6E7079; }
       button { height: 48px; border: none; border-radius: 12px; background: #111114; color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+      .bubble { padding: 14px; border-radius: 12px; border: 1px solid #E8E8EB; display: flex; flex-direction: column; gap: 10px; }
+      .bubble-head { display: flex; align-items: center; gap: 10px; }
+      .on-icon { width: 32px; height: 32px; border-radius: 50%; background: #ECFDF3; color: #15803D; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .bubble-title { font-size: 14px; font-weight: 600; }
+      .bubble-body { font-size: 13px; line-height: 1.5; color: #5F6168; }
+      .bubble button { height: 44px; font-size: 14px; }
+      .bubble .show { background: #C2410C; display: flex; align-items: center; justify-content: center; gap: 8px; }
+      .bubble .hide { border: 1px solid #E8E8EB; background: #FFFFFF; color: #111114; }
       [hidden] { display: none !important; }
     </style>
   </head>
@@ -35,6 +43,16 @@
         <li id="voice" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Screen and voice are being recorded</li>
         <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Saved on this computer as you go</li>
       </ul>
+      <div class="bubble" id="bubble-show" hidden>
+        <span class="bubble-title">Camera bubble</span>
+        <span class="bubble-body">Opens your camera in a small round window that floats above every app and is recorded with your screen. Drag it anywhere.</span>
+        <button type="button" class="show" id="bubble-open"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="M16 10l5-3v10l-5-3"></path></svg>Show camera bubble</button>
+      </div>
+      <div class="bubble" id="bubble-on" hidden>
+        <div class="bubble-head"><span class="on-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="M16 10l5-3v10l-5-3"></path></svg></span><span class="bubble-title">Camera bubble is on</span></div>
+        <span class="bubble-body">It floats above every app. Drag it anywhere. Hiding it takes it out of the video from that moment.</span>
+        <button type="button" class="hide" id="bubble-hide">Hide camera bubble</button>
+      </div>
       <p class="note">Closing this tab stops the recording. Everything up to then is saved.</p>
       <button type="button" id="back">Back to the recording</button>
     </main>

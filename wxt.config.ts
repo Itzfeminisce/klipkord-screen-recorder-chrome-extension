@@ -19,12 +19,13 @@ export default defineConfig({
     },
   },
   manifest: {
+    // O1: the Web Store item's public key goes in `manifest.key` (until then WXT_EXTENSION_KEY sets it).
     ...(extensionKey ? { key: extensionKey } : {}),
     name: 'Klipkord',
     description: 'Screen recorder in the Chrome side panel',
     // activeTab (granted by a shortcut) + scripting draw the marker toast in the active tab.
     permissions: ['sidePanel', 'offscreen', 'desktopCapture', 'storage', 'unlimitedStorage', 'identity', 'activeTab', 'scripting'],
-    // Requested only when the user turns on Penv Cloud, a cloud key or Ollama.
+    // Requested only when the user turns on Penv Cloud, a cloud key, Ollama or Google Drive, or allows drawing on a site.
     optional_host_permissions: [
       'https://penv.cloud/*',
       'https://api.groq.com/*',
@@ -32,12 +33,15 @@ export default defineConfig({
       'https://api.openai.com/*',
       'https://api.anthropic.com/*',
       'http://localhost:11434/*',
+      'https://www.googleapis.com/*',
+      '<all_urls>',
     ],
     action: { default_title: 'Open Klipkord' },
     commands: {
       'toggle-recording': { suggested_key: { default: 'Alt+Shift+R' }, description: 'Start or stop recording' },
       'toggle-pause': { suggested_key: { default: 'Alt+Shift+P' }, description: 'Pause or resume recording' },
       'add-marker': { suggested_key: { default: 'Alt+Shift+M' }, description: 'Add a marker' },
+      'toggle-draw': { suggested_key: { default: 'Alt+Shift+D' }, description: 'Draw on this page' },
     },
     // ONNX Runtime compiles its bundled wasm; MV3 blocks that without 'wasm-unsafe-eval'.
     content_security_policy: {

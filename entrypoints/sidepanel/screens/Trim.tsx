@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { PROBE_SEEK_SECONDS, formatLength, needsDurationProbe, percentOf, timeAtPoint } from '@/lib/comments';
 import { getRecording, updateRecording } from '@/lib/db';
 import { cut, describe, editedLength, keptRanges, playable, restore, setEnd, setStart, type Edit } from '@/lib/editList';
@@ -30,8 +30,24 @@ function EditLine({ edit, onRestore }: { edit: Edit; onRestore: () => void }) {
   );
 }
 
+function ToolRow({ title, hint, icon, onClick }: { title: string; hint: string; icon: ReactNode; onClick?: () => void }) {
+  return (
+    <button type="button" onClick={onClick}
+      style={{ minHeight: 56, padding: 0, border: 'none', background: 'none', font: 'inherit', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, color: '#111114', cursor: onClick ? 'pointer' : 'default' }}>
+      <span style={{ width: 32, height: 32, borderRadius: 10, background: '#FFF1EA', color: '#9A3412', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{icon}</svg>
+      </span>
+      <span style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontSize: 14, fontWeight: 500 }}>{title}</span>
+        <span style={{ fontSize: 12, color: '#5F6168' }}>{hint}</span>
+      </span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E7079" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+    </button>
+  );
+}
+
 export default function Trim() {
-  const { route, back, canGoBack, replace } = useRouter();
+  const { route, back, canGoBack, replace, navigate } = useRouter();
   const id = route.params.recordingId;
   const [rec, setRec] = useState<Recording | null>(null);
   const [edits, setEdits] = useState<KeptRange[]>([]);
@@ -178,6 +194,20 @@ export default function Trim() {
     }
   }
 
+  // The cuts so far are saved first, so the next screen starts from them.
+  async function openTool(screen: 'EditTranscript' | 'Cleanup') {
+    if (!id || saving) return;
+    setSaving(true);
+    try {
+      await updateRecording(id, { edits });
+      navigate(screen, { recordingId: id });
+    } catch (error) {
+      console.error('Klipkord: could not save the edits', error);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!rec) return <main className="screen" style={{ height: '100vh' }} />;
 
   const kept = keptRanges(edits, duration);
@@ -206,7 +236,7 @@ export default function Trim() {
           style={{ height: 36, padding: '0 14px', border: 'none', borderRadius: 10, background: '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
       </div>
 
-      <div style={{ margin: '12px 16px 0', height: 200, borderRadius: 14, background: '#26262B', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ margin: '12px 16px 0', aspectRatio: '16 / 9', borderRadius: 14, background: '#26262B', position: 'relative', overflow: 'hidden' }}>
         <video ref={video} src={src} playsInline preload="auto" onLoadedMetadata={onMetadata} onDurationChange={settle} onSeeked={settle}
           onTimeUpdate={() => { settle(); onTime(); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onClick={toggle} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
@@ -269,6 +299,14 @@ export default function Trim() {
           ))}
         </div>
       )}
+
+      <div style={{ margin: '12px 16px 0', padding: '0 14px', borderRadius: 16, background: '#FFFFFF', border: '1px solid #E8E8EB', display: 'flex', flexDirection: 'column' }}>
+        <ToolRow title="Edit by transcript" hint="Select words and delete them to cut that part." onClick={() => void openTool('EditTranscript')}
+          icon={<path d="M4 6h16M4 12h10M4 18h13" />} />
+        <div style={{ height: 1, background: '#EFEFF1' }} />
+        <ToolRow title="Remove silences and fillers" hint="Find long pauses and words like um and uh." onClick={() => void openTool('Cleanup')}
+          icon={<path d="M3 12h3l2-6 4 12 3-9 2 3h4" />} />
+      </div>
 
       <div style={{ flexGrow: 1 }} />
       <div style={{ margin: '12px 16px 20px', padding: '12px 14px', borderRadius: 12, background: '#FFFFFF', border: '1px solid #E8E8EB', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -21,7 +21,7 @@ function Thumb({ blob, length }: { blob?: Blob; length: number }) {
     return () => URL.revokeObjectURL(u);
   }, [blob]);
   return (
-    <span style={{ width: 96, height: 56, borderRadius: 8, background: '#26262B', position: 'relative', flexShrink: 0, overflow: 'hidden' }}>
+    <span style={{ width: 96, aspectRatio: '16 / 9', borderRadius: 8, background: '#26262B', position: 'relative', flexShrink: 0, overflow: 'hidden' }}>
       {url && <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
       <span style={{ position: 'absolute', right: 4, bottom: 4, padding: '1px 4px', borderRadius: 4, background: 'rgba(17,17,20,0.8)', color: '#FFFFFF', fontFamily: MONO, fontSize: 10 }}>{formatClock(length)}</span>
     </span>
@@ -62,6 +62,12 @@ export default function Library() {
           <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#FFFFFF' }} />New
         </button>
       } />
+
+      <div style={{ padding: '12px 16px 0' }}>
+        <button type="button" onClick={() => navigate('LibrarySearch')} style={{ width: '100%', height: 44, padding: '0 14px', borderRadius: 12, background: '#FFFFFF', border: '1px solid #E8E8EB', boxSizing: 'border-box', color: '#6E7079', font: 'inherit', fontSize: 14, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>Search words, titles and notes
+        </button>
+      </div>
 
       <div role="radiogroup" aria-label="Filter by style" style={{ padding: '12px 24px 0', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {chip('all', `All · ${list.length}`)}

@@ -20,12 +20,17 @@ import Overlay from './screens/Overlay';
 import Review from './screens/Review';
 import ReviewTranscript from './screens/ReviewTranscript';
 import ReviewComments from './screens/ReviewComments';
+import ReviewAsk from './screens/ReviewAsk';
 import NoteStyle from './screens/NoteStyle';
 import Trim from './screens/Trim';
+import EditTranscript from './screens/EditTranscript';
+import Cleanup from './screens/Cleanup';
 import Export from './screens/Export';
+import GifClip from './screens/GifClip';
 import Saved from './screens/Saved';
 import Library from './screens/Library';
 import LibraryEmpty from './screens/LibraryEmpty';
+import LibrarySearch from './screens/LibrarySearch';
 import Storage from './screens/Storage';
 import Settings from './screens/Settings';
 import Recovered from './screens/Recovered';
@@ -50,12 +55,17 @@ export const SCREENS: Record<ScreenName, ComponentType> = {
   Review,
   ReviewTranscript,
   ReviewComments,
+  ReviewAsk,
   NoteStyle,
   Trim,
+  EditTranscript,
+  Cleanup,
   Export,
+  GifClip,
   Saved,
   Library,
   LibraryEmpty,
+  LibrarySearch,
   Storage,
   Settings,
   Recovered,

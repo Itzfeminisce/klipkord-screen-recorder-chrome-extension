@@ -7,8 +7,10 @@ import { formatBytes, formatClock } from '@/lib/time';
 import type { Recording } from '@/lib/types';
 import { DETECTED_BLURB, DETECTED_TITLE } from '@/lib/notes/style';
 import { Brand, ICONS, Icon, StateCard } from './Home';
-import { NotesUnavailable, WritingBar, useNotesJob } from '../components/NotesBody';
+import { NoSpeechFound, NotesUnavailable, WritingBar, noSpeech, useNotesJob } from '../components/NotesBody';
 
+/** The transcript row's title: shown as writing until the transcript is done. */
+export const transcriptTitle = (pending: boolean) => (pending ? 'Writing the transcript' : 'Transcript ready');
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 const DONE_DOT = { width: 24, height: 24, borderRadius: '50%', background: '#ECFDF3', color: '#15803D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } as const;
 const SPIN_DOT = { width: 24, height: 24, borderRadius: '50%', border: '3px solid #F1F1F3', borderTopColor: '#C2410C', boxSizing: 'border-box', flexShrink: 0 } as const;
@@ -100,11 +102,11 @@ export default function Processing() {
             {rec && <span style={{ fontSize: 12, color: '#6E7079' }}>{shortClock(rec.duration)} · {rec.height ? `${rec.height}p` : rec.quality} · {formatBytes(rec.bytes)}</span>}
           </span>
         </li>
-        {rec && (
+        {rec && !noSpeech(rec) && (
           <li style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             {rec.transcriptPending ? <span style={SPIN_DOT} aria-hidden="true" /> : <span style={DONE_DOT}><Icon size={14}>{ICONS.check}</Icon></span>}
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>{rec.transcriptPending ? 'Writing the transcript' : 'Transcript ready'}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{transcriptTitle(rec.transcriptPending)}</span>
               {rec.transcriptPending && <span style={{ fontSize: 12, color: '#6E7079' }}>Turning what you said into text.</span>}
               {!rec.transcriptPending && (
                 <span style={{ fontSize: 12, color: '#6E7079' }}>
@@ -136,9 +138,10 @@ export default function Processing() {
         )}
       </ol>
 
-      {(phase === 'no-engine' || phase === 'failed') && (
+      {noSpeech(rec) && <div style={{ margin: '12px 24px 0' }}><NoSpeechFound /></div>}
+      {!noSpeech(rec) && (phase === 'no-engine' || phase === 'failed') && (
         <div style={{ margin: '12px 24px 0' }}>
-          <NotesUnavailable groqDown={phase === 'failed' && progress?.engines?.length === 1 && progress.engines[0] === 'groq'} />
+          <NotesUnavailable groqDown={phase === 'failed' && progress?.engines?.length === 1 && progress.engines[0] === 'groq'} failed={phase === 'failed'} recordingId={id} />
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildDetectPrompt, guessStyle, parseDetect } from './style';
-import type { Marker } from '../types';
+import { buildDetectPrompt, guessStyle, parseDetect, STYLE_SECTIONS } from './style';
+import type { Marker, NoteStyle } from '../types';
 
 const m = (kind: Marker['kind'], at = 0): Marker => ({ id: kind + at, at, kind });
 
@@ -29,5 +29,16 @@ describe('buildDetectPrompt', () => {
     const { user } = buildDetectPrompt(segs, [m('bug', 228_000)]);
     expect(user.length).toBeLessThan(4300);
     expect(user).toContain('[03:48] bug');
+  });
+});
+
+describe('section headings (NoteSections frame)', () => {
+  const headings = (s: NoteStyle) => STYLE_SECTIONS[s].map((d) => d.heading);
+  it('names each style’s sections', () => {
+    expect(headings('howto')).toEqual(['Steps']);
+    expect(headings('update')).toEqual(['What changed', 'What’s next', 'Blocked']);
+    expect(headings('meeting')).toEqual(['Decisions']);
+    expect(headings('general')).toEqual([]);
+    expect(headings('bug')).toEqual(['Steps to reproduce', 'Expected', 'What happened']);
   });
 });

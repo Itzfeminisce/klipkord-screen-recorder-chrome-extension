@@ -1,8 +1,9 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
+import { openDB } from 'idb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  clearFolderHandle, closeDB, deleteRecording, getFolderHandle, getRecording, listRecordings, listUnfinished,
+  DB_VERSION, clearFolderHandle, closeDB, deleteRecording, getFolderHandle, getRecording, listRecordings, listUnfinished,
   markInterrupted, putFolderHandle, putRecording, updateRecording,
 } from './db';
 import type { Recording } from './types';
@@ -63,6 +64,28 @@ describe('db', () => {
     const out = await getRecording('a');
     expect(out).toMatchObject({ duration: 5000, bytes: 99, savedTo: { folder: 'F' }, notes: [{ id: 'n1' }] });
     expect(out?.markers.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
+  });
+
+  it('upgrades v1 records unchanged plus transcriptModel, and keeps the folder handle', async () => {
+    const v1 = await openDB('klipkord', 1, {
+      upgrade(db) {
+        db.createObjectStore('recordings', { keyPath: 'id' }).createIndex('status', 'status');
+        db.createObjectStore('handles');
+      },
+    });
+    const ready = { ...rec('ready', 1), transcript: [{ start: 0, end: 900, text: 'hi' }], summary: undefined };
+    const pending = { ...rec('pending', 2, 'processing'), transcriptPending: true };
+    const cut = rec('cut', 3, 'unfinished');
+    for (const r of [ready, pending, cut]) await v1.put('recordings', r);
+    await v1.put('handles', { name: 'Videos' }, 'folder');
+    v1.close();
+
+    expect(DB_VERSION).toBe(3);
+    expect(await getRecording('ready')).toEqual({ ...ready, transcriptModel: 'full' });
+    expect(await getRecording('pending')).toEqual({ ...pending, transcriptModel: 'live' });
+    expect(await getRecording('cut')).toEqual({ ...cut, transcriptModel: 'live' });
+    expect((await getFolderHandle())?.name).toBe('Videos');
+    expect((await listUnfinished()).map((r) => r.id)).toEqual(['cut']);
   });
 
   it('stores and clears the folder handle', async () => {

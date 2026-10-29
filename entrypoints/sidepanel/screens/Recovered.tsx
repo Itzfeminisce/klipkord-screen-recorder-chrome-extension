@@ -72,7 +72,7 @@ export default function Recovered() {
 
       {rec && (
         <div style={{ margin: '22px 24px 0', padding: 12, borderRadius: 16, background: '#FFFFFF', border: '1px solid #E8E8EB', display: 'flex', gap: 12, alignItems: 'center' }}>
-          <Thumb recording={rec} width={112} height={64} />
+          <Thumb recording={rec} width={112} />
           <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <span style={{ fontSize: 14, fontWeight: 600 }}>{rec.title}</span>
             <span style={{ fontSize: 12, color: '#6E7079' }}>{dayAndTime(rec.createdAt)} · {shortClock(rec.duration)} · {formatBytes(bytes || rec.bytes)}</span>

@@ -1,4 +1,5 @@
 import type { CaptureMode, MarkerKind, Quality, Settings } from './types';
+import type { BubbleStatus } from './bubble';
 import type { RecorderState } from './recorder';
 import type { TranscriptStatus } from './transcribe/queue';
 
@@ -22,6 +23,9 @@ export type Message =
   // Recorder tab → background (badge, session state).
   | { type: 'recorder/state'; state: RecorderState }
   | { type: 'recorder/tick'; elapsed: number }
+  // Floating camera bubble (T4): the recorder tab answers get and announces each change.
+  | { type: 'bubble/get' }
+  | { type: 'bubble/status'; status: BubbleStatus }
   // Live transcript (T6): offscreen ↔ background and side panel.
   | { type: 'transcript/config' }                       // offscreen → background: ai, language and Groq key
   | { type: 'transcript/status'; status: TranscriptStatus }

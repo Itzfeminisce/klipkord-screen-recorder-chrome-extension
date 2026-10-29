@@ -29,8 +29,8 @@ const DTYPES: Record<Device, Record<string, string>> = {
 const dtypeText = (d: Device) => Object.entries(DTYPES[d]).map(([k, v]) => `${k}=${v}`).join(' ');
 
 type InMessage =
-  | { type: 'load'; model: string }
-  | { type: 'transcribe'; id: number; audio: Float32Array }
+  | { type: 'load'; model: string; device?: Device }
+  | { type: 'transcribe'; id: number; audio: Float32Array; timestamps?: 'word' }
   | { type: 'probe'; url: string }
   | { type: 'dispose' };
 
@@ -58,8 +58,9 @@ async function create(model: string, device: Device) {
   })) as AutomaticSpeechRecognitionPipeline;
 }
 
-async function load(model: string) {
+async function load(model: string, only?: Device) {
   let device: Device = 'wasm';
+  if (only === 'wasm') return loaded(await create(model, 'wasm'), 'wasm', 'skipped: wasm asked for');
   let webgpuError: string | null = null;
   const nav = self.navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } };
   // navigator.gpu can exist with no usable adapter, so ask for one before trying WebGPU.
@@ -80,7 +81,11 @@ async function load(model: string) {
   } else {
     webgpuError ??= nav.gpu ? 'no WebGPU adapter' : 'navigator.gpu missing';
   }
-  if (!asr) asr = await create(model, 'wasm');
+  loaded(asr ?? (await create(model, 'wasm')), device, webgpuError);
+}
+
+function loaded(pipe: AutomaticSpeechRecognitionPipeline, device: Device, webgpuError: string | null) {
+  asr = pipe;
   self.postMessage({
     type: 'loaded',
     device,
@@ -91,9 +96,19 @@ async function load(model: string) {
   });
 }
 
-async function transcribe(id: number, audio: Float32Array) {
+async function transcribe(id: number, audio: Float32Array, timestamps?: 'word') {
   if (!asr) throw new Error('model not loaded');
   const start = performance.now();
+  if (timestamps) {
+    // Audio past 30 s needs chunking; word times come from the cross-attention alignment.
+    const out = (await asr(audio, { return_timestamps: 'word', chunk_length_s: 30, stride_length_s: 5 })) as {
+      text: string;
+      chunks?: { text: string; timestamp: [number, number | null] }[];
+    };
+    const words = (out.chunks ?? []).map((c) => ({ text: c.text, start: c.timestamp[0], end: c.timestamp[1] }));
+    self.postMessage({ type: 'done', id, ms: performance.now() - start, words: words.length, wordTimes: words });
+    return;
+  }
   const out = (await asr(audio)) as { text: string };
   const words = out.text.trim() ? out.text.trim().split(/\s+/).length : 0;
   self.postMessage({ type: 'done', id, ms: performance.now() - start, words });
@@ -113,8 +128,8 @@ async function probe(url: string) {
 
 async function handle(msg: InMessage) {
   try {
-    if (msg.type === 'load') await load(msg.model);
-    else if (msg.type === 'transcribe') await transcribe(msg.id, msg.audio);
+    if (msg.type === 'load') await load(msg.model, msg.device);
+    else if (msg.type === 'transcribe') await transcribe(msg.id, msg.audio, msg.timestamps);
     else if (msg.type === 'probe') await probe(msg.url);
     else if (msg.type === 'dispose') {
       await asr?.dispose();

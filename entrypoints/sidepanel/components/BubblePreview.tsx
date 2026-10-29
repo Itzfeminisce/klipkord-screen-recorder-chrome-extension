@@ -77,7 +77,7 @@ export function BubblePreview({ bubble, camera, stream, compact }: { bubble: Bub
     return <div ref={ref} style={{ flexGrow: 1, height: 72, borderRadius: 10, background: '#26262B', position: 'relative', overflow: 'hidden' }}>{face}</div>;
   }
   return (
-    <div ref={ref} style={{ margin: '12px 24px 0', height: 196, borderRadius: 16, background: '#111114', position: 'relative', overflow: 'hidden' }}>
+    <div ref={ref} style={{ margin: '12px 24px 0', aspectRatio: '16 / 9', borderRadius: 16, background: '#111114', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', left: 16, top: 16, right: 16, bottom: 16, borderRadius: 8, background: '#26262B', padding: 14, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span style={{ width: '55%', height: 8, borderRadius: 4, background: '#3A3A41' }} />
         <span style={{ width: '78%', height: 8, borderRadius: 4, background: '#3A3A41' }} />

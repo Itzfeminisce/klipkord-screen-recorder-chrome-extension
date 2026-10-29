@@ -25,7 +25,7 @@ const DTYPES: Record<Device, Record<string, string>> = {
 
 type Request =
   | { id: number; type: 'load'; model: string }
-  | { id: number; type: 'transcribe'; audio: Float32Array; language: string }
+  | { id: number; type: 'transcribe'; audio: Float32Array; language: string; words?: boolean }
   | { id: number; type: 'dispose' };
 
 interface Progress { status: string; file?: string; loaded?: number; total?: number }
@@ -68,18 +68,27 @@ async function load(model: string): Promise<Device> {
   return device;
 }
 
-async function transcribe(audio: Float32Array, language: string): Promise<string> {
+interface Word { start: number; end: number; text: string }
+interface Output { text: string; chunks?: { text: string; timestamp: [number, number | null] }[] }
+
+async function transcribe(audio: Float32Array, language: string, words: boolean): Promise<{ text: string; words?: Word[] }> {
   if (!asr) throw new Error('model not loaded');
-  const multilingual = !loaded?.model.endsWith('.en');
+  const multilingual = !loaded?.model.replace('_timestamped', '').endsWith('.en');
   const options = multilingual && language !== 'auto' ? { language, task: 'transcribe' } : {};
-  const out = (await asr(audio, options)) as { text: string };
-  return out.text.trim();
+  // Chunks are about 10 s, under Whisper's 30 s window, so no chunk_length_s is needed.
+  const out = (await asr(audio, words ? { ...options, return_timestamps: 'word' } : options)) as Output;
+  if (!words) return { text: out.text.trim() };
+  const list = (out.chunks ?? []).map((c) => {
+    const start = Math.round(c.timestamp[0] * 1000);
+    return { start, end: c.timestamp[1] === null ? start : Math.round(c.timestamp[1] * 1000), text: c.text.trim() };
+  });
+  return { text: out.text.trim(), words: list };
 }
 
 async function handle(msg: Request) {
   try {
     if (msg.type === 'load') self.postMessage({ type: 'loaded', id: msg.id, device: await load(msg.model) });
-    else if (msg.type === 'transcribe') self.postMessage({ type: 'text', id: msg.id, text: await transcribe(msg.audio, msg.language) });
+    else if (msg.type === 'transcribe') self.postMessage({ type: 'text', id: msg.id, ...(await transcribe(msg.audio, msg.language, Boolean(msg.words))) });
     else if (msg.type === 'dispose') {
       await asr?.dispose();
       asr = null;

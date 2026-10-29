@@ -37,9 +37,52 @@ export function WritingBar({ progress, now }: { progress: NotesProgress; now: nu
   );
 }
 
-/** When no AI can write the notes, or every one that could failed. */
-export function NotesUnavailable({ groqDown }: { groqDown: boolean }) {
+/** A notes state from StatesNotes: one message and the ways forward. */
+function NoteState({ title, body, actions }: { title: string; body: string; actions: { label: string; onClick: () => void; primary?: boolean }[] }) {
+  return (
+    <div role="status" style={{ padding: 14, borderRadius: 16, background: '#FFFFFF', border: '1px solid #E8E8EB', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={{ fontSize: 14, fontWeight: 600 }}>{title}</span>
+        <span style={{ fontSize: 13, lineHeight: 1.45, color: '#5F6168' }}>{body}</span>
+      </span>
+      <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {actions.map((a) => (
+          <button key={a.label} type="button" onClick={a.onClick}
+            style={{ height: 36, padding: '0 14px', borderRadius: 10, border: a.primary ? 'none' : '1px solid #DCDCE0', background: a.primary ? '#111114' : '#FFFFFF', color: a.primary ? '#FFFFFF' : '#111114', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{a.label}</button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/** `notes-failed`: the video and transcript are safe. */
+export function NotesFailed({ recordingId }: { recordingId: string | undefined }) {
   const { navigate } = useRouter();
+  return (
+    <NoteState title="Notes failed" body="Your video and transcript are safe. Klipkord couldn’t write the notes this time."
+      actions={[
+        { label: 'Try again', primary: true, onClick: () => { if (recordingId) void startNotes(recordingId); } },
+        { label: 'Choose how to write notes', onClick: () => navigate('Settings') },
+      ]} />
+  );
+}
+
+/** `no-speech-found`: nothing was transcribed, so there are no notes. */
+export function NoSpeechFound() {
+  const { navigate } = useRouter();
+  return (
+    <NoteState title="No speech found" body="Klipkord didn’t hear anyone talking, so there is no transcript or notes. Your video is still saved."
+      actions={[{ label: 'Check your microphone', primary: true, onClick: () => navigate('Settings') }]} />
+  );
+}
+
+/** True once the transcript is final and empty. */
+export const noSpeech = (rec: Recording | null | undefined): boolean => !!rec && !rec.transcriptPending && rec.transcript.length === 0;
+
+/** When no AI can write the notes, or every one that could failed. */
+export function NotesUnavailable({ groqDown, failed, recordingId }: { groqDown: boolean; failed?: boolean; recordingId?: string }) {
+  const { navigate } = useRouter();
+  if (failed && !groqDown) return <NotesFailed recordingId={recordingId} />;
   return groqDown ? (
     <StateCard icon={ICONS.warn} tone="amber" title="Groq isn’t responding" body="Transcripts still run on this computer. For notes, use Ollama or Groq."
       action="Choose how to write notes" onAction={() => navigate('Settings')} />
@@ -52,7 +95,7 @@ export function NotesUnavailable({ groqDown }: { groqDown: boolean }) {
 const FOOTER: Record<string, string> = {
   builtin: 'Written on this computer by Chrome’s built-in AI.',
   ollama: 'Written on this computer by Ollama.',
-  groq: 'Written by Groq.',
+  groq: 'Written by Groq. Only the transcript text was sent.',
 };
 
 const H2: CSSProperties = { margin: 0, fontSize: 12, fontWeight: 600, color: '#5F6168', textTransform: 'uppercase', letterSpacing: '0.04em' };
@@ -158,9 +201,12 @@ export default function NotesBody({ recordingId, onSeek }: { recordingId: string
           </span>
         </div>
       )}
-      {!working && (phase === 'no-engine' || phase === 'failed') && !notes && <NotesUnavailable groqDown={phase === 'failed' && progress?.engines?.length === 1 && progress.engines[0] === 'groq'} />}
-      {!working && notes && <NotesView notes={notes} onSeek={onSeek} />}
-      {!working && notes && FOOTER[notes.engine] && (
+      {!working && noSpeech(rec) && <NoSpeechFound />}
+      {!working && !noSpeech(rec) && (phase === 'no-engine' || phase === 'failed') && !notes && (
+        <NotesUnavailable groqDown={phase === 'failed' && progress?.engines?.length === 1 && progress.engines[0] === 'groq'} failed={phase === 'failed'} recordingId={recordingId} />
+      )}
+      {!working && notes && !noSpeech(rec) && <NotesView notes={notes} onSeek={onSeek} />}
+      {!working && notes && !noSpeech(rec) && FOOTER[notes.engine] && (
         <div style={{ padding: '10px 0 16px', fontSize: 12, color: '#6E7079' }}>{FOOTER[notes.engine]}</div>
       )}
     </div>

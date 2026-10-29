@@ -3,6 +3,7 @@ import { commandMessage, onMessage, send } from '@/lib/messages';
 import { RECORDER_PATH, closeRecorder, getRecorderState, hasRecorder, requestStart, setRecorderState } from '@/lib/capture';
 import { MARKER_LABEL, addMarker, markerTime, undoMarker } from '@/lib/markers';
 import { formatClock } from '@/lib/time';
+import { endDraw, toggleDrawShortcut } from '@/lib/draw';
 import type { MarkerKind } from '@/lib/types';
 import { loadTranscriptConfig } from '@/lib/transcribe/groq';
 import { IDLE, badgeTitle, clockElapsed, shortClock, type RecorderState } from '@/lib/recorder';
@@ -90,6 +91,7 @@ export default defineBackground(() => {
       current = msg.state;
       void setRecorderState(msg.state).catch((error) => console.error('Klipkord: could not save recorder state', error));
       showState(msg.state);
+      void endDraw(msg.state).catch((error) => console.error('Klipkord: could not remove the drawing', error));
       void closeRecorderWhenIdle();
     } else if (msg.type === 'transcript/idle') {
       void closeRecorderWhenIdle();
@@ -148,6 +150,10 @@ export default defineBackground(() => {
         browser.sidePanel.open({ windowId }).catch((error) => console.error('Klipkord: could not open the side panel', error));
       }
       void requestStart().catch((error) => console.error('Klipkord: could not start recording', error));
+      return;
+    }
+    if (command === 'toggle-draw') {
+      void toggleDrawShortcut(tab, current).catch((error) => console.error('Klipkord: could not switch drawing', error));
       return;
     }
     if (command === 'toggle-pause') {

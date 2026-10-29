@@ -1,4 +1,4 @@
-import type { BubbleSize, Corner, Settings } from './types';
+import type { BubbleMode, BubbleSize, CaptureMode, Corner, Settings } from './types';
 
 export type Bubble = Settings['bubble'];
 export interface Rect { x: number; y: number; width: number; height: number }
@@ -38,4 +38,27 @@ export function fitRect(srcW: number, srcH: number, outW: number, outH: number):
   const width = Math.round(srcW * scale);
   const height = Math.round(srcH * scale);
   return { x: Math.round((outW - width) / 2), y: Math.round((outH - height) / 2), width, height };
+}
+
+/** The setting's mode; settings saved before v2 have none and float. */
+export function bubbleMode(bubble: Bubble): BubbleMode {
+  return bubble.mode ?? 'floating';
+}
+
+/** True when the bubble floats on screen instead of being drawn: window or screen capture with "Floating on screen". */
+export function floatsBubble(mode: CaptureMode | undefined, bubble: Bubble, camera: boolean): boolean {
+  return camera && mode !== undefined && mode !== 'tab' && bubbleMode(bubble) === 'floating';
+}
+
+/** The recorder tab's floating bubble: `wanted` while a take should show it, `open` once its window is up. */
+export interface BubbleStatus { wanted: boolean; open: boolean; tabId?: number; windowId?: number }
+
+/** Side of the floating bubble's window in CSS px; even Small fits the hover controls. */
+export const FLOATING_SIDE: Record<BubbleSize, number> = { S: 220, M: 260, L: 320 };
+export const SIZE_NAME: Record<BubbleSize, string> = { S: 'Small', M: 'Medium', L: 'Large' };
+
+/** The next size up (+1) or down (-1), staying at the ends. */
+export function stepSize(size: BubbleSize, step: 1 | -1): BubbleSize {
+  const i = SIZES.indexOf(size) + step;
+  return SIZES[Math.max(0, Math.min(SIZES.length - 1, i))] ?? size;
 }
