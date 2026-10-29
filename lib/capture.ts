@@ -5,6 +5,7 @@ import type { CaptureMode, Quality } from './types';
 
 export const RECORDER_PATH = '/offscreen.html';
 const STATE_KEY = 'recorder';
+const SOURCE_KEY = 'recorderSource';
 const START_KEY = 'startRequested';
 
 type Source = `${chrome.desktopCapture.DesktopCaptureSourceType}`;
@@ -75,7 +76,10 @@ export async function prepareRecorder(msg: Omit<MessageOf<'recorder/prepare'>, '
   await chrome.tabs.update(recorder.id, { active: true });
   if (previous && recorder.windowId !== previous.windowId) await chrome.windows.update(recorder.windowId, { focused: true });
   try {
-    return await command({ type: 'recorder/prepare', ...msg });
+    const reply = await command({ type: 'recorder/prepare', ...msg });
+    // The picker does not say which tab was chosen; the tab the person came from is the one shown.
+    if (reply.ok && msg.mode === 'tab' && previous?.title) await browser.storage.session.set({ [SOURCE_KEY]: { title: previous.title, url: previous.url ?? '' } }).catch(() => undefined);
+    return reply;
   } finally {
     if (previous?.id !== undefined && previous.id !== recorder.id) {
       await chrome.tabs.update(previous.id, { active: true }).catch((error) => console.error('Klipkord: could not return to the tab', error));
@@ -153,4 +157,27 @@ export function onStartRequest(cb: () => void): () => void {
   };
   browser.storage.onChanged.addListener(listener);
   return () => browser.storage.onChanged.removeListener(listener);
+}
+
+/** "Tab: <page title> · <site>" for a tab recording; the mode's own label for a window or the screen. */
+export function sourceLabel(mode: CaptureMode | undefined, modeLabel: string, source: { title: string; url: string } | null): string {
+  if (!mode) return '';
+  if (mode !== 'tab' || !source) return modeLabel;
+  let site = '';
+  try { site = new URL(source.url).hostname.replace(/^www\./, ''); } catch { /* no site */ }
+  return `Tab: ${source.title}${site ? ` · ${site}` : ''}`;
+}
+
+/** The tab being recorded, as saved when the picker closed; null until read. */
+export function useRecordedTab(): { title: string; url: string } | null {
+  const [source, setSource] = useState<{ title: string; url: string } | null>(null);
+  useEffect(() => {
+    browser.storage.session.get(SOURCE_KEY).then((s) => setSource((s[SOURCE_KEY] as typeof source) ?? null), () => undefined);
+    const listener = (changes: Record<string, Browser.storage.StorageChange>, area: string) => {
+      if (area === 'session' && changes[SOURCE_KEY]) setSource((changes[SOURCE_KEY].newValue as typeof source) ?? null);
+    };
+    browser.storage.onChanged.addListener(listener);
+    return () => browser.storage.onChanged.removeListener(listener);
+  }, []);
+  return source;
 }

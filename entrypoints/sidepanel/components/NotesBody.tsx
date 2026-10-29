@@ -84,8 +84,8 @@ export function NotesUnavailable({ groqDown, failed, recordingId }: { groqDown: 
   const { navigate } = useRouter();
   if (failed && !groqDown) return <NotesFailed recordingId={recordingId} />;
   return groqDown ? (
-    <StateCard icon={ICONS.warn} tone="amber" title="Groq isn’t responding" body="Transcripts still run on this computer. For notes, use Ollama or Groq."
-      action="Choose how to write notes" onAction={() => navigate('Settings')} />
+    <StateCard icon={ICONS.warn} tone="amber" title="Groq isn’t responding" body="Klipkord switched to on-device AI for this recording, so your transcript keeps going."
+      action="Open Settings" onAction={() => navigate('Settings')} />
   ) : (
     <StateCard icon={ICONS.warn} tone="grey" title="Chrome’s built-in AI isn’t available here" body="Transcripts still run on this computer. For notes, use Ollama or Groq."
       action="Choose how to write notes" onAction={() => navigate('Settings')} />

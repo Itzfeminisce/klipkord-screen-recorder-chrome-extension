@@ -14,7 +14,6 @@ export type ScreenName =
   | 'Recording'
   | 'Paused'
   | 'Processing'
-  | 'Overlay'
   | 'Review'
   | 'ReviewTranscript'
   | 'ReviewComments'
@@ -32,9 +31,7 @@ export type ScreenName =
   | 'Storage'
   | 'Settings'
   | 'Recovered'
-  | 'Offline'
-  | 'StatesRecording'
-  | 'StatesSetup';
+  | 'Offline';
 
 /** `recordingId` for recording screens; `atMs` to open the player at a time. */
 export interface RouteParams { recordingId?: string; atMs?: number }

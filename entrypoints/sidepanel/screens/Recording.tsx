@@ -3,7 +3,7 @@ import { useRouter } from '../router';
 import { LiveBubblePreview } from '../components/BubblePreview';
 import { DrawSwitch } from '../components/DrawSwitch';
 import { BubblePrompt } from '../components/BubblePrompt';
-import { command, useNow, useRecorder } from '@/lib/capture';
+import { command, sourceLabel, useNow, useRecordedTab, useRecorder } from '@/lib/capture';
 import type { Marker, MarkerKind, Segment } from '@/lib/types';
 import { getRecording } from '@/lib/db';
 import { loadKeys } from '@/lib/keys';
@@ -33,6 +33,7 @@ export function useFollowRecorder(here: RecorderState['status']): RecorderState 
 }
 
 export function LiveHeader({ state, paused }: { state: RecorderState; paused?: boolean }) {
+  const tab = useRecordedTab();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 24px 0' }}>
       {paused ? (
@@ -40,12 +41,12 @@ export function LiveHeader({ state, paused }: { state: RecorderState; paused?: b
       ) : (
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 999, background: '#DC2626', color: '#FFFFFF', fontSize: 12, fontWeight: 600 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#FFFFFF' }} />Recording</span>
       )}
-      <span style={{ flexGrow: 1, fontSize: 13, color: '#B4B5BC' }}>{state.mode ? MODE_LABEL[state.mode] : ''}</span>
+      <span style={{ flexGrow: 1, fontSize: 13, color: '#B4B5BC' }}>{sourceLabel(state.mode, state.mode ? MODE_LABEL[state.mode] : '', tab)}</span>
     </div>
   );
 }
 
-const T_ICONS = {
+export const T_ICONS = {
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   cloud: <path d="M7 18a5 5 0 1 1 1-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8z" />,
 };

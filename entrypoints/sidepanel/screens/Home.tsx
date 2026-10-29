@@ -7,14 +7,16 @@ import { command, onStartRequest, takeStartRequest, useRecorder } from '@/lib/ca
 import { meterBars, rms } from '@/lib/mix';
 import { shortClock } from '@/lib/recorder';
 import type { CaptureMode, NoteStyle, Quality, Recording, Settings } from '@/lib/types';
+import { wasDisconnected } from '@/lib/penvApp';
 import { useOffline } from './Offline';
+import { BannerAction, StateBanner } from './Setup';
 
 export const MONO = 'var(--mono)';
 
 /** Inline SVG icon from frame markup (24px grid, stroked). */
-export function Icon({ size = 18, children }: { size?: number; children: ReactNode }) {
+export function Icon({ size = 18, fill, children }: { size?: number; fill?: boolean; children: ReactNode }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={fill ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       {children}
     </svg>
   );
@@ -91,8 +93,8 @@ export function dayAndTime(at: number, now = Date.now()): string {
 }
 
 const MODES: { mode: CaptureMode; label: string; icon: ReactNode }[] = [
-  { mode: 'tab', label: 'A tab', icon: ICONS.tab },
-  { mode: 'window', label: 'A window', icon: ICONS.window },
+  { mode: 'tab', label: 'A tab', icon: ICONS.window },
+  { mode: 'window', label: 'A window', icon: ICONS.tab },
   { mode: 'screen', label: 'Whole screen', icon: ICONS.screen },
 ];
 export const MODE_LABEL: Record<CaptureMode, string> = { tab: 'A tab', window: 'A window', screen: 'Whole screen' };
@@ -188,6 +190,11 @@ export default function Home() {
     if (offline) replace('Offline');
   }, [offline, replace]);
 
+  const [penvGone, setPenvGone] = useState(false);
+  useEffect(() => {
+    wasDisconnected().then(setPenvGone, () => undefined);
+  }, []);
+
   const start = useCallback(() => navigate('Countdown'), [navigate]);
 
   // Alt+Shift+R from any tab.
@@ -226,7 +233,7 @@ export default function Home() {
         </>}
       />
 
-      {(capture.mic && meter.blocked) || (capture.camera && camera.busy) || (capture.mode === 'window' && capture.sound) ? (
+      {(capture.mic && meter.blocked) || (capture.camera && camera.busy) || (capture.mode === 'window' && capture.sound) || penvGone ? (
         <div style={{ margin: '12px 24px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {capture.mic && meter.blocked && (
             <StateCard icon={ICONS.micOff} tone="red" title="Klipkord can’t use your microphone"
@@ -242,6 +249,10 @@ export default function Home() {
             <StateCard icon={ICONS.noSound} tone="grey" title="A single window can’t include its sound"
               body="Your voice is still recorded. Pick a tab or your whole screen to include computer sound."
               action="Pick again" onAction={() => setCapture({ mode: 'tab' })} />
+          )}
+          {penvGone && (
+            <StateBanner mark="pv" tone="warn" title="Penv Cloud is disconnected" body="Klipkord is using on-device AI until you connect again."
+              action={<BannerAction onClick={() => navigate('PenvConnect')}>Connect again</BannerAction>} />
           )}
         </div>
       ) : null}

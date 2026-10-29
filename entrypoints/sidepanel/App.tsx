@@ -16,7 +16,6 @@ import Countdown from './screens/Countdown';
 import Recording from './screens/Recording';
 import Paused from './screens/Paused';
 import Processing from './screens/Processing';
-import Overlay from './screens/Overlay';
 import ReviewTabs, { isReviewTab } from './screens/ReviewTabs';
 import NoteStyle from './screens/NoteStyle';
 import Trim from './screens/Trim';
@@ -32,8 +31,6 @@ import Storage from './screens/Storage';
 import Settings from './screens/Settings';
 import Recovered from './screens/Recovered';
 import Offline from './screens/Offline';
-import StatesRecording from './screens/StatesRecording';
-import StatesSetup from './screens/StatesSetup';
 
 export const SCREENS: Record<ScreenName, ComponentType> = {
   Main,
@@ -48,7 +45,6 @@ export const SCREENS: Record<ScreenName, ComponentType> = {
   Recording,
   Paused,
   Processing,
-  Overlay,
   Review: ReviewTabs,
   ReviewTranscript: ReviewTabs,
   ReviewComments: ReviewTabs,
@@ -67,8 +63,6 @@ export const SCREENS: Record<ScreenName, ComponentType> = {
   Settings,
   Recovered,
   Offline,
-  StatesRecording,
-  StatesSetup,
 };
 
 /** First screen: Recovered when an unfinished recording is waiting, Main (welcome) on first run, otherwise Home. */

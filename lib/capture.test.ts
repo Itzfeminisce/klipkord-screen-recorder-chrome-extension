@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { captureSize, pickerSources } from './capture';
+import { captureSize, pickerSources, sourceLabel } from './capture';
+
+describe('sourceLabel', () => {
+  const tab = { title: 'Checkout', url: 'https://www.acme.com/pay' };
+  it('names the page and site for a tab, and keeps the mode label otherwise', () => {
+    expect(sourceLabel('tab', 'A tab', tab)).toBe('Tab: Checkout · acme.com');
+    expect(sourceLabel('tab', 'A tab', null)).toBe('A tab');
+    expect(sourceLabel('window', 'A window', tab)).toBe('A window');
+  });
+});
 
 describe('picker sources', () => {
   it('offers sound for a tab and the screen, never for a window', () => {

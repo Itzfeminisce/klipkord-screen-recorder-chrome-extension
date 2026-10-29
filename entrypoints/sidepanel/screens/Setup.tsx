@@ -14,7 +14,7 @@ export const MONO = 'var(--mono)';
 export const CARD: CSSProperties = { borderRadius: 16, background: '#FFFFFF', border: '1px solid #E8E8EB' };
 export const PAGE: CSSProperties = { background: '#F6F6F7', color: '#111114' };
 const BLACK_BUTTON: CSSProperties = {
-  height: 48, borderRadius: 12, border: 'none', background: '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 15,
+  width: '100%', height: 48, borderRadius: 12, border: 'none', background: '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 15,
   fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
 };
 
@@ -62,8 +62,8 @@ export function PenvTile({ size = 40 }: { size?: number }) {
 }
 
 /** A message card from StatesSetup: a round mark, a title, one line and one action. */
-export function StateBanner({ mark, tone = 'info', title, body, action }: { mark: ReactNode; tone?: 'info' | 'error'; title: string; body: string; action: ReactNode }) {
-  const tint = tone === 'error' ? { background: '#FEF2F2', color: '#B91C1C' } : { background: '#F1F1F3', color: '#44464D' };
+export function StateBanner({ mark, tone = 'info', title, body, action }: { mark: ReactNode; tone?: 'info' | 'error' | 'warn'; title: string; body: string; action: ReactNode }) {
+  const tint = tone === 'error' ? { background: '#FEF2F2', color: '#B91C1C' } : tone === 'warn' ? { background: '#FFF7E6', color: '#92400E' } : { background: '#F1F1F3', color: '#44464D' };
   return (
     <div role="alert" style={{ ...CARD, padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', gap: 12 }}>

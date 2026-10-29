@@ -92,18 +92,18 @@ export default function ModelDownload() {
           </div>
           <span style={{ fontSize: 12, color: '#6E7079' }}>{sizeLine}</span>
         </div>
-        {builtinAi && (
-          <>
-            <div style={{ height: 1, background: '#EFEFF1' }} />
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>Note writing</span>
-                <span style={{ fontSize: 12, color: '#6E7079' }}>Chrome’s built-in AI</span>
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: '#15803D' }}><Icon size={14}>{ICONS.check}</Icon>Ready</span>
-            </div>
-          </>
-        )}
+        <>
+          <div style={{ height: 1, background: '#EFEFF1' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Note writing</span>
+              <span style={{ fontSize: 12, color: '#6E7079' }}>Chrome’s built-in AI</span>
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 500, color: '#15803D' }}>
+              {builtinAi && <><Icon size={14}>{ICONS.check}</Icon>Ready</>}
+            </span>
+          </div>
+        </>
       </div>
 
       {phase === 'failed' && (
