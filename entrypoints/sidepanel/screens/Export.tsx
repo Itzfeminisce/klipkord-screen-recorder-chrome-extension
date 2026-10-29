@@ -5,7 +5,7 @@ import { editedLength } from '@/lib/editList';
 import { encodeKept } from '@/lib/encode';
 import { ensureAccess, fileNames, pickFolder, saveFiles, videoExt, type Choice, type Planned } from '@/lib/folder';
 import { estimateVideoBytes } from '@/lib/library';
-import { buildMarkdown, markdownToHtml } from '@/lib/markdown';
+import { buildMarkdown } from '@/lib/markdown';
 import { updateSettings } from '@/lib/settings';
 import { formatBytes, formatClock } from '@/lib/time';
 import type { Recording } from '@/lib/types';
@@ -70,16 +70,9 @@ function download(name: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
-/** Print-to-PDF from a hidden frame: no extra page, no scripts. */
-function printPdf(html: string) {
-  const frame = document.createElement('iframe');
-  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;visibility:hidden';
-  frame.srcdoc = html;
-  frame.onload = () => {
-    frame.contentWindow?.print();
-    setTimeout(() => frame.remove(), 60000);
-  };
-  document.body.append(frame);
+/** Print-to-PDF from its own tab: the side panel cannot show Chrome's print dialog. */
+function printPdf(recordingId: string) {
+  void browser.tabs.create({ url: browser.runtime.getURL(`/print.html?recordingId=${encodeURIComponent(recordingId)}`) });
 }
 
 export default function Export() {
@@ -240,7 +233,7 @@ export default function Export() {
             {copied ? <svg width="14" height="14" viewBox="0 0 24 24" strokeWidth="2.4" {...stroke} aria-label="Copy"><path d="M5 12l5 5 9-10" /></svg> : 'Copy'}
           </button>
           <button type="button" onClick={() => download('notes.md', new Blob([markdown()], { type: 'text/markdown' }))} style={OUTLINE}>Markdown</button>
-          <button type="button" onClick={() => printPdf(markdownToHtml(markdown(), r.title))} style={OUTLINE}>PDF</button>
+          <button type="button" onClick={() => printPdf(r.id)} style={OUTLINE}>PDF</button>
         </div>
         <span style={SUB}>The original recording stays in Klipkord.</span>
       </div>
