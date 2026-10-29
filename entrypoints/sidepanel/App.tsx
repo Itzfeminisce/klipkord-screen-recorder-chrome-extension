@@ -26,6 +26,7 @@ import Export from './screens/Export';
 import Saved from './screens/Saved';
 import Library from './screens/Library';
 import LibraryEmpty from './screens/LibraryEmpty';
+import LibrarySearch from './screens/LibrarySearch';
 import Storage from './screens/Storage';
 import Settings from './screens/Settings';
 import Recovered from './screens/Recovered';
@@ -56,6 +57,7 @@ export const SCREENS: Record<ScreenName, ComponentType> = {
   Saved,
   Library,
   LibraryEmpty,
+  LibrarySearch,
   Storage,
   Settings,
   Recovered,

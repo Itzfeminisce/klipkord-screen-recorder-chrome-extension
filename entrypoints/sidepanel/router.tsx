@@ -24,6 +24,7 @@ export type ScreenName =
   | 'Saved'
   | 'Library'
   | 'LibraryEmpty'
+  | 'LibrarySearch'
   | 'Storage'
   | 'Settings'
   | 'Recovered'

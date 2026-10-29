@@ -63,6 +63,12 @@ export default function Library() {
         </button>
       } />
 
+      <div style={{ padding: '12px 16px 0' }}>
+        <button type="button" onClick={() => navigate('LibrarySearch')} style={{ width: '100%', height: 44, padding: '0 14px', borderRadius: 12, background: '#FFFFFF', border: '1px solid #E8E8EB', boxSizing: 'border-box', color: '#6E7079', font: 'inherit', fontSize: 14, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>Search words, titles and notes
+        </button>
+      </div>
+
       <div role="radiogroup" aria-label="Filter by style" style={{ padding: '12px 24px 0', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {chip('all', `All · ${list.length}`)}
         {FILTERS.map((s) => chip(s, CHIP_LABEL[s]))}

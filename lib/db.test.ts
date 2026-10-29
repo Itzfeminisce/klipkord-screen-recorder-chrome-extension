@@ -80,7 +80,7 @@ describe('db', () => {
     await v1.put('handles', { name: 'Videos' }, 'folder');
     v1.close();
 
-    expect(DB_VERSION).toBe(2);
+    expect(DB_VERSION).toBe(3);
     expect(await getRecording('ready')).toEqual({ ...ready, transcriptModel: 'full' });
     expect(await getRecording('pending')).toEqual({ ...pending, transcriptModel: 'live' });
     expect(await getRecording('cut')).toEqual({ ...cut, transcriptModel: 'live' });
