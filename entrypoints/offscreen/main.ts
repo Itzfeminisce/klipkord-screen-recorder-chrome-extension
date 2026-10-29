@@ -4,7 +4,7 @@ import { onMessage, send, type MessageOf } from '@/lib/messages';
 import { createMix, createSilenceWatch, type Mix } from '@/lib/mix';
 import {
   IDLE, VIDEO_BITRATE, chooseMime, chooseVoiceMime, clockElapsed, clockPause, clockResume, clockStart, containerOf,
-  createChunkWriter, type EndReason, type RecorderState,
+  createChunkWriter, shortClock, type EndReason, type RecorderState,
 } from '@/lib/recorder';
 import { pickSource, type RecorderReply } from '@/lib/capture';
 import type { Bubble } from '@/lib/bubble';
@@ -23,7 +23,25 @@ let state: RecorderState = IDLE;
 function setState(patch: Partial<RecorderState>) {
   state = { ...state, ...patch };
   void send({ type: 'recorder/state', state });
+  paint();
 }
+
+const live = document.getElementById('live')!;
+const voice = document.getElementById('voice')!;
+function paint() {
+  const on = state.status === 'recording' || state.status === 'paused';
+  live.hidden = !on;
+  if (on) live.textContent = `Recording ${shortClock(clockElapsed(state.clock, Date.now()))}`;
+  voice.hidden = !state.mic;
+}
+setInterval(paint, 1000);
+
+// Read the window up front: sidePanel.open must run inside the click itself.
+let windowId: number | undefined;
+void chrome.tabs.getCurrent().then((tab) => { windowId = tab?.windowId; });
+document.getElementById('back')!.addEventListener('click', () => {
+  if (windowId !== undefined) chrome.sidePanel.open({ windowId }).catch((error) => console.error('Klipkord: could not open the side panel', error));
+});
 
 const stopTracks = (stream: MediaStream | null | undefined) => stream?.getTracks().forEach((t) => t.stop());
 
