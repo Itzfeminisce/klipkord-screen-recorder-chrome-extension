@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useRouter } from '../router';
 import { LiveBubblePreview } from '../components/BubblePreview';
+import { DrawSwitch } from '../components/DrawSwitch';
 import { command, useNow, useRecorder } from '@/lib/capture';
 import type { Marker, MarkerKind, Segment } from '@/lib/types';
 import { getRecording } from '@/lib/db';
@@ -220,6 +221,8 @@ export default function Recording() {
           <span style={{ width: 14, height: 14, borderRadius: 3, background: '#DC2626' }} />Stop
         </button>
       </div>
+
+      <DrawSwitch state={state} onRecordTab={() => navigate('Home')} />
 
       <div data-slot="markers" style={{ padding: '18px 24px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 500, color: '#B4B5BC' }}>Mark this moment</span>

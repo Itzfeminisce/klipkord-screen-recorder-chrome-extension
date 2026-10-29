@@ -18,6 +18,15 @@ describe('manifest', () => {
     expect(m.optional_host_permissions).toContain('https://www.googleapis.com/*');
   });
 
+  it('asks for a site only when drawing is allowed on it, and adds the draw shortcut', async () => {
+    const m = await manifest();
+    expect(m.optional_host_permissions).toContain('<all_urls>');
+    expect(m.host_permissions).not.toContain('<all_urls>');
+    const commands = m.commands as Record<string, { suggested_key: { default: string } }>;
+    expect(Object.keys(commands)).toHaveLength(4);
+    expect(commands['toggle-draw']?.suggested_key.default).toBe('Alt+Shift+D');
+  });
+
   it('puts the extension key in manifest.key', async () => {
     vi.stubEnv('WXT_EXTENSION_KEY', 'test-public-key');
     expect((await manifest()).key).toBe('test-public-key');

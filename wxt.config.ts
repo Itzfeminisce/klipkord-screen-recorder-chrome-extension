@@ -25,7 +25,7 @@ export default defineConfig({
     description: 'Screen recorder in the Chrome side panel',
     // activeTab (granted by a shortcut) + scripting draw the marker toast in the active tab.
     permissions: ['sidePanel', 'offscreen', 'desktopCapture', 'storage', 'unlimitedStorage', 'identity', 'activeTab', 'scripting'],
-    // Requested only when the user turns on Penv Cloud, a cloud key, Ollama or Google Drive.
+    // Requested only when the user turns on Penv Cloud, a cloud key, Ollama or Google Drive, or allows drawing on a site.
     optional_host_permissions: [
       'https://penv.cloud/*',
       'https://api.groq.com/*',
@@ -34,12 +34,15 @@ export default defineConfig({
       'https://api.anthropic.com/*',
       'http://localhost:11434/*',
       'https://www.googleapis.com/*',
+      '<all_urls>',
     ],
     action: { default_title: 'Open Klipkord' },
     commands: {
       'toggle-recording': { suggested_key: { default: 'Alt+Shift+R' }, description: 'Start or stop recording' },
       'toggle-pause': { suggested_key: { default: 'Alt+Shift+P' }, description: 'Pause or resume recording' },
       'add-marker': { suggested_key: { default: 'Alt+Shift+M' }, description: 'Add a marker' },
+      // Placeholder description until the designer's copy lands.
+      'toggle-draw': { suggested_key: { default: 'Alt+Shift+D' }, description: 'Draw on the page' },
     },
     // ONNX Runtime compiles its bundled wasm; MV3 blocks that without 'wasm-unsafe-eval'.
     content_security_policy: {
