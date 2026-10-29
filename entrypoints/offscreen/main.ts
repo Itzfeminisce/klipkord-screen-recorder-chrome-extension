@@ -11,6 +11,9 @@ import type { Bubble } from '@/lib/bubble';
 import { createCompositor, type Compositor, type Ticker } from '@/lib/compositor';
 import { freeBytes, shouldAutoStop } from '@/lib/storageMath';
 import { videoStore } from '@/lib/videoStore';
+import {
+  cancelTranscript, currentStatus, finishTranscript, pauseTranscript, startTranscript, stopCapture, transcriptPatch, useGroq,
+} from './transcript';
 
 // The offscreen document owns every stream and recorder, so recording goes on with the side panel closed.
 
@@ -204,6 +207,8 @@ async function begin(): Promise<RecorderReply> {
   voice?.start(1000);
   take = t;
   setState({ status: 'recording', recordingId: id, clock: clockStart(now), silentMic: false, disk: undefined, endedBy: undefined });
+  // The transcript listens to its own copy of the mic; the recorder never waits on it.
+  void startTranscript(id, voice ? micTrack ?? null : null).catch((error) => console.error('Klipkord: could not start the transcript', error));
 
   const silence = createSilenceWatch();
   t.timers.push(
@@ -229,7 +234,7 @@ async function persist(t: Take, patch: Partial<Parameters<typeof putRecording>[0
   try {
     const rec = await getRecording(t.id);
     if (!rec) return;
-    await putRecording({ ...rec, duration: clockElapsed(state.clock, Date.now()), bytes: takeBytes(t), ...patch });
+    await putRecording({ ...rec, duration: clockElapsed(state.clock, Date.now()), bytes: takeBytes(t), ...transcriptPatch(t.id), ...patch });
   } catch (error) {
     console.error('Klipkord: could not update the recording', error);
   }
@@ -251,6 +256,7 @@ async function pauseTake(): Promise<RecorderReply> {
   if (!take || state.status !== 'recording') return fail('not recording');
   if (take.video.state === 'recording') take.video.pause();
   if (take.voice?.state === 'recording') take.voice.pause();
+  pauseTranscript(true);
   setState({ status: 'paused', clock: clockPause(state.clock, Date.now()), silentMic: false });
   await persist(take, { status: 'paused' });
   return ok;
@@ -260,6 +266,7 @@ async function resumeTake(): Promise<RecorderReply> {
   if (!take || state.status !== 'paused') return fail('not paused');
   if (take.video.state === 'paused') take.video.resume();
   if (take.voice?.state === 'paused') take.voice.resume();
+  pauseTranscript(false);
   setState({ status: 'recording', clock: clockResume(state.clock, Date.now()) });
   await persist(take, { status: 'recording' });
   return ok;
@@ -271,12 +278,17 @@ async function finish(endedBy: EndReason): Promise<RecorderReply> {
   const clock = clockPause(state.clock, Date.now());
   setState({ status: 'saving', clock });
   t.timers.forEach(clearInterval);
+  pauseTranscript(true);
   await Promise.all([recorderStopped(t.video), recorderStopped(t.voice)]);
   await Promise.all([t.videoWriter.flush(), t.voiceWriter?.flush()]);
   take = null;
-  await persist(t, { status: 'processing', duration: clockElapsed(clock, Date.now()) });
+  stopCapture();
+  const duration = clockElapsed(clock, Date.now());
+  await persist(t, { status: 'processing', duration });
   await teardown();
   setState({ status: 'done', recordingId: t.id, endedBy, silentMic: false });
+  // Catch-up and the base pass run after the recorder is done; this document stays open until they finish.
+  void finishTranscript(t.id, duration).catch((error) => console.error('Klipkord: could not finish the transcript', error));
   return ok;
 }
 
@@ -285,6 +297,7 @@ async function dropTake() {
   const t = take;
   if (!t) return;
   t.discard = true;
+  cancelTranscript();
   t.timers.forEach(clearInterval);
   take = null;
   await Promise.all([recorderStopped(t.video), recorderStopped(t.voice)]);
@@ -349,6 +362,8 @@ onMessage((msg) => {
     case 'recorder/discard': return run(discard);
     case 'recorder/mute': return run(() => mute(msg.muted));
     case 'recorder/bubble': return setBubble(msg.bubble);
+    case 'transcript/get': return currentStatus() ?? { busy: false };
+    case 'transcript/use-groq': return useGroq().then(() => true);
     default: return undefined;
   }
 });

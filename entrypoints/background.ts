@@ -4,6 +4,7 @@ import { getRecorderState, hasOffscreen, requestStart, setRecorderState } from '
 import { MARKER_LABEL, addMarker, markerTime, undoMarker } from '@/lib/markers';
 import { formatClock } from '@/lib/time';
 import type { MarkerKind } from '@/lib/types';
+import { loadTranscriptConfig } from '@/lib/transcribe/groq';
 import { IDLE, badgeTitle, clockElapsed, shortClock, type RecorderState } from '@/lib/recorder';
 
 const DEFAULT_TITLE = 'Open Klipkord';
@@ -87,14 +88,24 @@ export default defineBackground(() => {
       current = msg.state;
       void setRecorderState(msg.state).catch((error) => console.error('Klipkord: could not save recorder state', error));
       showState(msg.state);
-      if (msg.state.status === 'idle' || msg.state.status === 'done') {
-        void chrome.offscreen.closeDocument().catch(() => undefined);
-      }
+      void closeOffscreenWhenIdle();
+    } else if (msg.type === 'transcript/idle') {
+      void closeOffscreenWhenIdle();
+    } else if (msg.type === 'transcript/config') {
+      return loadTranscriptConfig().catch((error) => console.error('Klipkord: could not read transcript settings', error));
     } else if (msg.type === 'recorder/tick') {
       if (current.status === 'recording') setBadge(msg.elapsed);
     }
     return undefined;
   });
+
+  // The offscreen document stays open while it still transcribes a finished recording.
+  async function closeOffscreenWhenIdle() {
+    if (current.status !== 'idle' && current.status !== 'done') return;
+    const transcript = await send<{ busy?: boolean }>({ type: 'transcript/get' });
+    if (transcript?.busy) return;
+    await chrome.offscreen.closeDocument().catch(() => undefined);
+  }
 
   // Saves the marker first; the toast is a bonus and stays silent where the page cannot take it (chrome:// pages).
   async function shortcutMarker(kind: MarkerKind, tabId: number | undefined) {

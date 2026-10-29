@@ -7,6 +7,7 @@ import { command, onStartRequest, takeStartRequest, useRecorder } from '@/lib/ca
 import { meterBars, rms } from '@/lib/mix';
 import { shortClock } from '@/lib/recorder';
 import type { CaptureMode, NoteStyle, Quality, Recording, Settings } from '@/lib/types';
+import { useOffline } from './Offline';
 
 export const MONO = 'var(--mono)';
 
@@ -180,6 +181,12 @@ export default function Home() {
     if (recorder?.status === 'recording') replace('Recording', { recordingId: recorder.recordingId });
     else if (recorder?.status === 'paused') replace('Paused', { recordingId: recorder.recordingId });
   }, [recorder, replace]);
+
+  // Cloud AI with no network: the Offline screen (T6).
+  const offline = useOffline();
+  useEffect(() => {
+    if (offline) replace('Offline');
+  }, [offline, replace]);
 
   const start = useCallback(() => navigate('Countdown'), [navigate]);
 

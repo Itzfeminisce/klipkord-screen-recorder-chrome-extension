@@ -1,5 +1,6 @@
 import type { CaptureMode, MarkerKind, Quality, Settings } from './types';
 import type { RecorderState } from './recorder';
+import type { TranscriptStatus } from './transcribe/queue';
 
 /** Runtime messages. Keyboard commands arrive as these; T3 and T5 act on them. */
 export type Message =
@@ -20,7 +21,13 @@ export type Message =
   | { type: 'recorder/mute'; muted: boolean }
   // Offscreen recorder → background (badge, session state).
   | { type: 'recorder/state'; state: RecorderState }
-  | { type: 'recorder/tick'; elapsed: number };
+  | { type: 'recorder/tick'; elapsed: number }
+  // Live transcript (T6): offscreen ↔ background and side panel.
+  | { type: 'transcript/config' }                       // offscreen → background: ai, language and Groq key
+  | { type: 'transcript/status'; status: TranscriptStatus }
+  | { type: 'transcript/get' }                          // → offscreen: the current TranscriptStatus
+  | { type: 'transcript/use-groq' }                     // "Use Groq for this one"
+  | { type: 'transcript/idle' };                        // offscreen → background: nothing left to transcribe
 
 export type MessageType = Message['type'];
 export type MessageOf<T extends MessageType> = Extract<Message, { type: T }>;
