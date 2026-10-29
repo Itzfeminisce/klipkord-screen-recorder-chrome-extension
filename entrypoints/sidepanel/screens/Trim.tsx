@@ -194,13 +194,13 @@ export default function Trim() {
     }
   }
 
-  // The cuts so far are saved first, so EditTranscript starts from them.
-  async function editByTranscript() {
+  // The cuts so far are saved first, so the next screen starts from them.
+  async function openTool(screen: 'EditTranscript' | 'Cleanup') {
     if (!id || saving) return;
     setSaving(true);
     try {
       await updateRecording(id, { edits });
-      navigate('EditTranscript', { recordingId: id });
+      navigate(screen, { recordingId: id });
     } catch (error) {
       console.error('Klipkord: could not save the edits', error);
     } finally {
@@ -301,11 +301,10 @@ export default function Trim() {
       )}
 
       <div style={{ margin: '12px 16px 0', padding: '0 14px', borderRadius: 16, background: '#FFFFFF', border: '1px solid #E8E8EB', display: 'flex', flexDirection: 'column' }}>
-        <ToolRow title="Edit by transcript" hint="Select words and delete them to cut that part." onClick={() => void editByTranscript()}
+        <ToolRow title="Edit by transcript" hint="Select words and delete them to cut that part." onClick={() => void openTool('EditTranscript')}
           icon={<path d="M4 6h16M4 12h10M4 18h13" />} />
         <div style={{ height: 1, background: '#EFEFF1' }} />
-        {/* Cleanup is built by T9; the row has no target yet. */}
-        <ToolRow title="Remove silences and fillers" hint="Find long pauses and words like um and uh."
+        <ToolRow title="Remove silences and fillers" hint="Find long pauses and words like um and uh." onClick={() => void openTool('Cleanup')}
           icon={<path d="M3 12h3l2-6 4 12 3-9 2 3h4" />} />
       </div>
 

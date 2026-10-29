@@ -22,6 +22,7 @@ export type ScreenName =
   | 'NoteStyle'
   | 'Trim'
   | 'EditTranscript'
+  | 'Cleanup'
   | 'Export'
   | 'GifClip'
   | 'Saved'
