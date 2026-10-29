@@ -1,15 +1,16 @@
 import { TESTS, availabilityOf, emptyResults, errorText, failingTests, numberLines, resultsJson, withResult } from '@/lib/check/results';
 import type { Results, Status, TestId, TestResult, Value } from '@/lib/check/results';
 import { StoppedError, TimeoutError, cleanupStack, guard, pause, watchdog } from '@/lib/check/guard';
-import { frameStats, levelDb, mean, megabytes, realTimeFactor, round } from '@/lib/check/stats';
-import { builtinAiNote, captureTarget, chromeMajor, soundStatus } from '@/lib/check/verdicts';
+import { downloadSummary, frameStats, levelDb, mean, megabytes, realTimeFactor, round } from '@/lib/check/stats';
+import type { FileProgress } from '@/lib/check/stats';
+import { builtinAiNote, captureTarget, chromeMajor, smallSkipNote, soundStatus } from '@/lib/check/verdicts';
 
 const HINTS: Record<TestId, string> = {
   mp4: 'Records 10 s of a test animation with a tone, once as MP4 and once as WebM. No prompts.',
   sound: 'Pick "Entire screen" and turn on "Also share system audio". Play a video with sound before you press Run.',
   composite: 'Pick "Entire screen" and allow the camera. Play a video on screen. Watch the live preview. Takes 60 s.',
   whisper:
-    'Allow the microphone and talk or play speech for 2 minutes. Downloads whisper-tiny, whisper-base and whisper-small. Press Skip if whisper-small is too slow.',
+    'Downloads whisper-tiny, then allow the microphone and talk or play speech for 30 s. Then runs whisper-base, and whisper-small only if base is fast. Test model download only checks the model host in seconds.',
   builtinAi: 'Asks Chrome whether Summarizer and LanguageModel are available. No prompts.',
 };
 
@@ -37,7 +38,7 @@ interface Live {
   skip?: () => void;
 }
 const live = new Map<TestId, Live>();
-const LIMIT_MS: Record<TestId, number> = { mp4: 30_000, sound: 30_000, composite: 120_000, whisper: 15 * 60_000, builtinAi: 30_000 };
+const LIMIT_MS: Record<TestId, number> = { mp4: 30_000, sound: 30_000, composite: 120_000, whisper: 10 * 60_000, builtinAi: 30_000 };
 const messages = new Map<string, string>();
 
 function setStatus(text: string, key = 'page') {
@@ -534,15 +535,20 @@ async function testComposite(run: Run) {
 
 const SAMPLE_RATE = 16_000;
 const CHUNK_S = 10;
-const CHUNKS = 12;
+const CHUNKS = 3;
 const MINUTE = 60_000;
+const PROBE_URL = 'https://huggingface.co/onnx-community/whisper-tiny/resolve/main/config.json';
+
+type Answer = Record<string, unknown>;
 
 class WhisperWorker {
   private worker = new Worker(new URL('./whisper.worker.ts', import.meta.url), { type: 'module' });
-  private waiting: { resolve: (m: Record<string, unknown>) => void; reject: (e: Error) => void }[] = [];
+  private waiting: { resolve: (m: Answer) => void; reject: (e: Error) => void }[] = [];
+  onProgress: ((m: Answer) => void) | null = null;
 
   constructor() {
-    this.worker.onmessage = (e: MessageEvent<Record<string, unknown>>) => {
+    this.worker.onmessage = (e: MessageEvent<Answer>) => {
+      if (e.data.type === 'progress') return this.onProgress?.(e.data);
       const w = this.waiting.shift();
       if (e.data.type === 'error') w?.reject(new Error(String(e.data.message)));
       else w?.resolve(e.data);
@@ -554,9 +560,9 @@ class WhisperWorker {
     for (const w of this.waiting.splice(0)) w.reject(error);
   }
 
-  // The worker answers each message once, in order.
-  send(msg: unknown, opts: { ms: number; what: string; signal: AbortSignal }, transfer: Transferable[] = []) {
-    const answer = new Promise<Record<string, unknown>>((resolve, reject) => {
+  // The worker answers each message once, in order; progress messages are not answers.
+  send(msg: unknown, opts: { ms: number; what: string; signal?: AbortSignal }, transfer: Transferable[] = []) {
+    const answer = new Promise<Answer>((resolve, reject) => {
       this.waiting.push({ resolve, reject });
       this.worker.postMessage(msg, transfer);
     });
@@ -569,7 +575,26 @@ class WhisperWorker {
   }
 }
 
-async function recordMic(run: Run, onChunk: (chunk: Float32Array, index: number) => void): Promise<void> {
+// Shows the numbers in the table as they change, so a timeout or Stop still leaves them on screen.
+function liveNumbers(run: Run) {
+  let current = '';
+  let shownAt = 0;
+  return {
+    stage(name: string) {
+      current = name;
+      shownAt = performance.now();
+      run.stage(name);
+    },
+    refresh() {
+      if (performance.now() - shownAt < 500) return;
+      shownAt = performance.now();
+      run.stage(current);
+    },
+  };
+}
+type LiveNumbers = ReturnType<typeof liveNumbers>;
+
+async function recordMic(run: Run, onChunk: (index: number) => void): Promise<Float32Array[]> {
   const { signal } = run;
   const stream = await guard(navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } }), {
     ms: MINUTE,
@@ -584,22 +609,23 @@ async function recordMic(run: Run, onChunk: (chunk: Float32Array, index: number)
   // ScriptProcessor keeps this check to one file; T1 can move to an AudioWorklet.
   const node = ctx.createScriptProcessor(4096, 1, 1);
   const size = SAMPLE_RATE * CHUNK_S;
+  const chunks: Float32Array[] = [];
   let buf = new Float32Array(size);
   let fill = 0;
-  let index = 0;
   try {
     await guard(ctx.resume(), { ms: 10_000, what: 'Audio', signal });
     const full = new Promise<void>((resolve) => {
       node.onaudioprocess = (e) => {
-        if (index >= CHUNKS) return;
+        if (chunks.length >= CHUNKS) return;
         const input = e.inputBuffer.getChannelData(0);
         for (let i = 0; i < input.length; i++) {
           buf[fill++] = input[i]!;
           if (fill === size) {
-            onChunk(buf, index++);
+            chunks.push(buf);
+            onChunk(chunks.length - 1);
             buf = new Float32Array(size);
             fill = 0;
-            if (index >= CHUNKS) {
+            if (chunks.length >= CHUNKS) {
               resolve();
               return;
             }
@@ -610,6 +636,7 @@ async function recordMic(run: Run, onChunk: (chunk: Float32Array, index: number)
       node.connect(ctx.destination);
     });
     await guard(full, { ms: (CHUNK_S * CHUNKS + 30) * 1000, what: 'Microphone recording', signal });
+    return chunks;
   } finally {
     node.disconnect();
     source.disconnect();
@@ -618,43 +645,72 @@ async function recordMic(run: Run, onChunk: (chunk: Float32Array, index: number)
   }
 }
 
-async function loadModel(worker: WhisperWorker, model: string, key: string, run: Run, signal = run.signal) {
-  run.say(`Loading ${model} (first run downloads it)...`);
-  const m = await worker.send({ type: 'load', model: `onnx-community/${model}` }, { ms: 15 * MINUTE, what: `Loading ${model}`, signal });
+// Downloads and loads one model, reporting downloadedMb as it goes and downloadS and loadS when known.
+async function loadModel(worker: WhisperWorker, model: string, key: string, live: LiveNumbers, run: Run, signal: AbortSignal) {
   const n = run.numbers;
+  const files = new Map<string, FileProgress>();
+  const start = performance.now();
+  let loading = false;
   n[`${key}.model`] = `onnx-community/${model}`;
-  n[`${key}.device`] = String(m.device);
-  n[`${key}.dtype`] = String(m.dtype);
-  n[`${key}.wasmThreads`] = (m.threads as number | null) ?? null;
-  n[`${key}.crossOriginIsolated`] = Boolean(m.crossOriginIsolated);
-  n[`${key}.webgpuError`] = (m.webgpuError as string | null) ?? null;
-  n[`${key}.downloadMb`] = megabytes(Number(m.downloadBytes));
-  n[`${key}.loadS`] = round(Number(m.loadMs) / 1000);
+  live.stage(`download ${model}`);
+  run.say(`Downloading ${model} (cached after the first run)...`);
+  worker.onProgress = (p) => {
+    const file = String(p.file);
+    const f = files.get(file) ?? { loaded: 0, total: 0, done: false };
+    const total = Number(p.total);
+    const loaded = Number(p.loaded);
+    if (total > 0) f.total = total;
+    if (loaded > f.loaded) f.loaded = loaded;
+    if (p.status === 'done') f.done = true;
+    files.set(file, f);
+    const s = downloadSummary(files.values());
+    n[`${key}.files`] = `${s.doneFiles}/${s.files}`;
+    n[`${key}.downloadedMb`] = megabytes(s.loadedBytes);
+    n[`${key}.totalMb`] = megabytes(s.totalBytes);
+    // Files start in groups, so the last moment every known file is done marks the end of the download.
+    if (s.allDone) n[`${key}.downloadS`] = round((performance.now() - start) / 1000);
+    if (s.allDone !== loading) {
+      loading = s.allDone;
+      live.stage(`${loading ? 'load' : 'download'} ${model}`);
+      run.say(loading ? `Loading ${model}...` : `Downloading ${model}...`);
+    } else {
+      live.refresh();
+    }
+  };
+  try {
+    const m = await worker.send({ type: 'load', model: `onnx-community/${model}` }, { ms: 10 * MINUTE, what: `Loading ${model}`, signal });
+    const totalS = (performance.now() - start) / 1000;
+    const downloadS = typeof n[`${key}.downloadS`] === 'number' ? (n[`${key}.downloadS`] as number) : totalS;
+    n[`${key}.loadS`] = round(totalS - downloadS);
+    n[`${key}.device`] = String(m.device);
+    n[`${key}.dtype`] = String(m.dtype);
+    n[`${key}.wasmThreads`] = (m.threads as number | null) ?? null;
+    n[`${key}.crossOriginIsolated`] = Boolean(m.crossOriginIsolated);
+    n[`${key}.webgpuError`] = (m.webgpuError as string | null) ?? null;
+  } finally {
+    worker.onProgress = null;
+  }
 }
 
-function chunkStats(ms: number[], words: number[], numbers: Record<string, Value>, key: string) {
-  numbers[`${key}.chunks`] = ms.length;
-  if (!ms.length) return;
-  numbers[`${key}.meanChunkMs`] = Math.round(mean(ms));
-  numbers[`${key}.realTimeFactor`] = realTimeFactor(mean(ms), CHUNK_S * 1000);
-  numbers[`${key}.worstRealTimeFactor`] = realTimeFactor(Math.max(0, ...ms), CHUNK_S * 1000);
-  numbers[`${key}.words`] = words.reduce((a, b) => a + b, 0);
-}
-
-// Runs a loaded model over the saved chunks one by one.
-async function transcribeAll(worker: WhisperWorker, model: string, key: string, chunks: Float32Array[], run: Run, signal: AbortSignal) {
+// Runs a loaded model over the saved chunks one by one; returns the real-time factor, or null with no chunks done.
+async function transcribeAll(worker: WhisperWorker, model: string, key: string, chunks: Float32Array[], live: LiveNumbers, run: Run, signal: AbortSignal) {
+  const n = run.numbers;
   const ms: number[] = [];
   const words: number[] = [];
-  try {
-    for (const [i, chunk] of chunks.entries()) {
-      run.say(`${model}: chunk ${i + 1} of ${chunks.length}...`);
-      const m = await worker.send({ type: 'transcribe', id: i, audio: chunk.slice() }, { ms: 5 * MINUTE, what: `${model} chunk ${i + 1}`, signal });
-      ms.push(Number(m.ms));
-      words.push(Number(m.words));
-    }
-  } finally {
-    chunkStats(ms, words, run.numbers, key);
+  live.stage(`transcribe ${model}`);
+  for (const [i, chunk] of chunks.entries()) {
+    run.say(`${model}: chunk ${i + 1} of ${chunks.length}...`);
+    const m = await worker.send({ type: 'transcribe', id: i, audio: chunk.slice() }, { ms: 5 * MINUTE, what: `${model} chunk ${i + 1}`, signal });
+    ms.push(Number(m.ms));
+    words.push(Number(m.words));
+    n[`${key}.chunks`] = ms.length;
+    n[`${key}.chunkMs`] = ms.map((v) => Math.round(v)).join(' ');
+    n[`${key}.realTimeFactor`] = realTimeFactor(ms.reduce((a, b) => a + b, 0), ms.length * CHUNK_S * 1000);
+    n[`${key}.worstRealTimeFactor`] = realTimeFactor(Math.max(...ms), CHUNK_S * 1000);
+    n[`${key}.words`] = words.reduce((a, b) => a + b, 0);
+    live.stage(`transcribe ${model}`);
   }
+  return ms.length ? (n[`${key}.realTimeFactor`] as number) : null;
 }
 
 async function testWhisper(run: Run) {
@@ -662,54 +718,81 @@ async function testWhisper(run: Run) {
   numbers.chunkS = CHUNK_S;
   numbers.audioS = CHUNK_S * CHUNKS;
   numbers.cores = navigator.hardwareConcurrency ?? null;
+  const live = liveNumbers(run);
   const worker = new WhisperWorker();
   run.cleanup(() => worker.terminate());
   try {
-    // whisper-tiny transcribes live while the mic records; base and small then run on the same chunks.
-    await loadModel(worker, 'whisper-tiny', 'tiny', run);
-    const chunks: Float32Array[] = [];
-    const pending: Promise<Record<string, unknown>>[] = [];
-    run.say('Recording 2 minutes from the microphone. Talk or play speech...');
-    await recordMic(run, (chunk, i) => {
-      chunks.push(chunk);
-      run.say(`Recording... chunk ${i + 1} of ${CHUNKS}`);
-      const answer = worker.send({ type: 'transcribe', id: i, audio: chunk.slice() }, { ms: 15 * MINUTE, what: `whisper-tiny chunk ${i + 1}`, signal });
-      // A stop rejects every queued chunk; Promise.all below reports the first one.
-      answer.catch(() => undefined);
-      pending.push(answer);
-    });
-    run.say('Finishing whisper-tiny...');
-    const tinyDone = await Promise.all(pending);
-    chunkStats(
-      tinyDone.map((m) => Number(m.ms)),
-      tinyDone.map((m) => Number(m.words)),
-      numbers,
-      'tiny',
-    );
+    // The mic records only once whisper-tiny is ready; every model then runs on the same chunks.
+    await loadModel(worker, 'whisper-tiny', 'tiny', live, run, signal);
+    live.stage('record');
+    run.say(`Recording ${CHUNK_S * CHUNKS} s from the microphone. Talk or play speech...`);
+    const chunks = await recordMic(run, (i) => run.say(`Recording... chunk ${i + 1} of ${CHUNKS} done`));
+    numbers.micLevelDb = levelDb(chunks[chunks.length - 1]!);
+    await transcribeAll(worker, 'whisper-tiny', 'tiny', chunks, live, run, signal);
     await worker.send({ type: 'dispose' }, { ms: MINUTE, what: 'Unloading whisper-tiny', signal });
 
-    await loadModel(worker, 'whisper-base', 'base', run);
-    await transcribeAll(worker, 'whisper-base', 'base', chunks, run, signal);
+    await loadModel(worker, 'whisper-base', 'base', live, run, signal);
+    const baseRtf = await transcribeAll(worker, 'whisper-base', 'base', chunks, live, run, signal);
     await worker.send({ type: 'dispose' }, { ms: MINUTE, what: 'Unloading whisper-base', signal });
 
-    // whisper-small can be very slow on a CPU, so the owner may skip it and keep the rest.
-    const skip = new AbortController();
-    run.setSkip('Skip whisper-small', () => skip.abort());
-    const smallSignal = AbortSignal.any([signal, skip.signal]);
-    try {
-      await loadModel(worker, 'whisper-small', 'small', run, smallSignal);
-      await transcribeAll(worker, 'whisper-small', 'small', chunks, run, smallSignal);
-      numbers['small.skipped'] = false;
-    } catch (error) {
-      if (!(error instanceof StoppedError) || signal.aborted) throw error;
-      numbers['small.skipped'] = true;
-    } finally {
-      run.setSkip(null);
+    const note = smallSkipNote(baseRtf);
+    if (note) {
+      numbers['small.skipped'] = note;
+    } else {
+      // whisper-small can still be slow, so the owner may skip it and keep the rest.
+      const skip = new AbortController();
+      run.setSkip('Skip whisper-small', () => skip.abort());
+      const smallSignal = AbortSignal.any([signal, skip.signal]);
+      try {
+        await loadModel(worker, 'whisper-small', 'small', live, run, smallSignal);
+        await transcribeAll(worker, 'whisper-small', 'small', chunks, live, run, smallSignal);
+        numbers['small.skipped'] = false;
+      } catch (error) {
+        if (!(error instanceof StoppedError) || signal.aborted) throw error;
+        numbers['small.skipped'] = 'skipped by the owner';
+      } finally {
+        run.setSkip(null);
+      }
     }
+    live.stage('done');
   } finally {
     worker.terminate();
   }
 }
+
+async function probeFromPage(): Promise<string> {
+  const start = performance.now();
+  try {
+    const res = await fetch(PROBE_URL, { cache: 'no-store' });
+    const bytes = (await res.arrayBuffer()).byteLength;
+    return `HTTP ${res.status} ${res.statusText}, ${bytes} bytes, ${Math.round(performance.now() - start)} ms, from ${res.url}`;
+  } catch (error) {
+    return `error: ${errorText(error)}`;
+  }
+}
+
+// Fetches whisper-tiny's config.json from the page and from the worker, for a quick look at the model host.
+async function probeModelDownload(b: HTMLButtonElement) {
+  b.disabled = true;
+  setStatus('Testing the model download...', 'probe');
+  const page = await guard(probeFromPage(), { ms: 30_000, what: 'Model download test' }).catch((e: unknown) => `error: ${errorText(e)}`);
+  const worker = new WhisperWorker();
+  let inWorker: string;
+  try {
+    inWorker = String((await worker.send({ type: 'probe', url: PROBE_URL }, { ms: 30_000, what: 'Model download test in the worker' })).text);
+  } catch (error) {
+    inWorker = `error: ${errorText(error)}`;
+  } finally {
+    worker.terminate();
+  }
+  results = { ...results, machine: { ...results.machine, modelFetchPage: page, modelFetchWorker: inWorker } };
+  render();
+  setStatus(`Model download test. Page: ${page}. Worker: ${inWorker}`, 'probe');
+  b.disabled = false;
+}
+
+const probeButton = button('Test model download only', () => void probeModelDownload(probeButton));
+$('rerun').after(' ', probeButton);
 
 // --- 5. Built-in AI ---
 

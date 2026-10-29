@@ -46,3 +46,30 @@ export function levelDb(samples: Float32Array): number | null {
 export function megabytes(bytes: number): number {
   return round(bytes / 1_000_000);
 }
+
+export interface FileProgress {
+  loaded: number;
+  total: number;
+  done: boolean;
+}
+
+export interface DownloadSummary {
+  files: number;
+  doneFiles: number;
+  loadedBytes: number;
+  totalBytes: number;
+  allDone: boolean;
+}
+
+// Sums per-file download progress; a finished file counts its full size.
+export function downloadSummary(files: Iterable<FileProgress>): DownloadSummary {
+  const s: DownloadSummary = { files: 0, doneFiles: 0, loadedBytes: 0, totalBytes: 0, allDone: false };
+  for (const f of files) {
+    s.files++;
+    if (f.done) s.doneFiles++;
+    s.totalBytes += f.total;
+    s.loadedBytes += f.done ? Math.max(f.loaded, f.total) : f.loaded;
+  }
+  s.allDone = s.files > 0 && s.doneFiles === s.files;
+  return s;
+}

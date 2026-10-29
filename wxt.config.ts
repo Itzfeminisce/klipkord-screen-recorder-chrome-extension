@@ -29,8 +29,7 @@ export default defineConfig({
     content_security_policy: {
       extension_pages: "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'",
     },
-    // Cross-origin isolation lets ONNX Runtime use wasm threads on CPU-only machines.
-    cross_origin_embedder_policy: { value: 'require-corp' },
-    cross_origin_opener_policy: { value: 'same-origin' },
+    // The Whisper check fetches models from Hugging Face, which redirects to its CDN hosts.
+    host_permissions: ['https://huggingface.co/*', 'https://*.hf.co/*'],
   },
 });

@@ -3,10 +3,20 @@ import { env, pipeline, type AutomaticSpeechRecognitionPipeline } from '@hugging
 // The package exports no path to its wasm file.
 import ortWasmUrl from '../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm?url';
 
+const errorMessage = (error: unknown) => (error instanceof Error ? `${error.name}: ${error.message}` : String(error));
+
+// Any failure, even one outside a handled message, goes back to the page at once.
+self.addEventListener('unhandledrejection', (event) => {
+  self.postMessage({ type: 'error', message: `Whisper worker: ${errorMessage(event.reason)}` });
+});
+self.addEventListener('error', (event) => {
+  self.postMessage({ type: 'error', message: `Whisper worker: ${event.message || 'error'}` });
+});
+
 // Extension pages may not load remote code, so ONNX Runtime's wasm ships inside the extension.
 env.backends.onnx.wasm!.wasmPaths = { wasm: ortWasmUrl };
 env.allowLocalModels = false;
-// Threads need cross-origin isolation (set in the manifest); without it ONNX Runtime uses one.
+// The page is not cross-origin isolated, so ONNX Runtime runs one wasm thread.
 const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, self.navigator.hardwareConcurrency || 1)) : 1;
 env.backends.onnx.wasm!.numThreads = threads;
 
@@ -21,26 +31,34 @@ const dtypeText = (d: Device) => Object.entries(DTYPES[d]).map(([k, v]) => `${k}
 type InMessage =
   | { type: 'load'; model: string }
   | { type: 'transcribe'; id: number; audio: Float32Array }
+  | { type: 'probe'; url: string }
   | { type: 'dispose' };
+
+interface Progress {
+  status: string;
+  file?: string;
+  loaded?: number;
+  total?: number;
+}
 
 let asr: AutomaticSpeechRecognitionPipeline | null = null;
 
-async function create(model: string, device: Device, sizes: Map<string, number>) {
+async function create(model: string, device: Device) {
   const dtype = DTYPES[device];
   // Cast keeps tsc from expanding the pipeline's task overloads.
   const make = pipeline as (task: string, model: string, options: object) => Promise<unknown>;
   return (await make('automatic-speech-recognition', model, {
     device,
     dtype,
-    progress_callback: (p: { status: string; file?: string; total?: number }) => {
-      if (p.status === 'progress' && p.file && p.total) sizes.set(p.file, p.total);
+    // Progress messages are not answers; the page shows them as they come.
+    progress_callback: (p: Progress) => {
+      if (!p.file) return;
+      self.postMessage({ type: 'progress', device, status: p.status, file: p.file, loaded: p.loaded ?? 0, total: p.total ?? 0 });
     },
   })) as AutomaticSpeechRecognitionPipeline;
 }
 
 async function load(model: string) {
-  const sizes = new Map<string, number>();
-  const start = performance.now();
   let device: Device = 'wasm';
   let webgpuError: string | null = null;
   const nav = self.navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } };
@@ -49,22 +67,20 @@ async function load(model: string) {
   try {
     adapter = nav.gpu ? await nav.gpu.requestAdapter() : null;
   } catch (error) {
-    webgpuError = error instanceof Error ? error.message : String(error);
+    webgpuError = errorMessage(error);
   }
   if (adapter) {
     try {
-      asr = await create(model, 'webgpu', sizes);
+      asr = await create(model, 'webgpu');
       device = 'webgpu';
     } catch (error) {
       console.error('Klipkord: could not load Whisper on WebGPU', error);
-      webgpuError = error instanceof Error ? error.message : String(error);
+      webgpuError = errorMessage(error);
     }
   } else {
     webgpuError ??= nav.gpu ? 'no WebGPU adapter' : 'navigator.gpu missing';
   }
-  if (!asr) asr = await create(model, 'wasm', sizes);
-  let bytes = 0;
-  for (const b of sizes.values()) bytes += b;
+  if (!asr) asr = await create(model, 'wasm');
   self.postMessage({
     type: 'loaded',
     device,
@@ -72,8 +88,6 @@ async function load(model: string) {
     threads: device === 'wasm' ? threads : null,
     crossOriginIsolated: self.crossOriginIsolated,
     webgpuError,
-    downloadBytes: bytes,
-    loadMs: performance.now() - start,
   });
 }
 
@@ -85,10 +99,23 @@ async function transcribe(id: number, audio: Float32Array) {
   self.postMessage({ type: 'done', id, ms: performance.now() - start, words });
 }
 
+// Fetches one small file the way the model loader would, from inside the worker.
+async function probe(url: string) {
+  const start = performance.now();
+  try {
+    const res = await fetch(url, { cache: 'no-store' });
+    const bytes = (await res.arrayBuffer()).byteLength;
+    self.postMessage({ type: 'probed', text: `HTTP ${res.status} ${res.statusText}, ${bytes} bytes, ${Math.round(performance.now() - start)} ms, from ${res.url}` });
+  } catch (error) {
+    self.postMessage({ type: 'probed', text: `error: ${errorMessage(error)}` });
+  }
+}
+
 async function handle(msg: InMessage) {
   try {
     if (msg.type === 'load') await load(msg.model);
     else if (msg.type === 'transcribe') await transcribe(msg.id, msg.audio);
+    else if (msg.type === 'probe') await probe(msg.url);
     else if (msg.type === 'dispose') {
       await asr?.dispose();
       asr = null;
@@ -96,7 +123,7 @@ async function handle(msg: InMessage) {
     }
   } catch (error) {
     console.error('Klipkord: could not run Whisper', error);
-    self.postMessage({ type: 'error', message: error instanceof Error ? error.message : String(error) });
+    self.postMessage({ type: 'error', message: errorMessage(error) });
   }
 }
 
