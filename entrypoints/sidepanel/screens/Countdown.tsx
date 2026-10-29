@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from '../router';
 import { getSettings } from '@/lib/settings';
-import { captureSize, command, getRecorderState, hasRecorder, prepareRecorder, sourceLabel, useRecordedTab } from '@/lib/capture';
+import { captureSize, command, getRecorderState, hasRecorder, prepareRecorder } from '@/lib/capture';
 import type { Settings } from '@/lib/types';
-import { Brand, ICONS, MODE_LABEL, MONO, StateCard } from './Home';
+import { Brand, ICONS, MONO, StateCard } from './Home';
+import { SourceChipView } from './Recording';
 
 type Phase = 'picking' | 'counting' | 'cancelled' | 'starting';
 
@@ -15,7 +16,6 @@ export default function Countdown() {
   const [n, setN] = useState(3);
   const [capture, setCapture] = useState<Settings['capture'] | null>(null);
   const picking = useRef(false);
-  const tab = useRecordedTab();
 
   const pick = useCallback(async () => {
     if (picking.current) return;
@@ -96,7 +96,7 @@ export default function Countdown() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, textAlign: 'center' }}>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 600, letterSpacing: '-0.02em' }}>Recording starts in {shown}</h1>
-          {capture && <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: '#B4B5BC' }}>{sourceLabel(capture.mode, MODE_LABEL[capture.mode], tab)}</p>}
+          {capture && <SourceChipView mode={capture.mode} />}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           {chips.map((chip) => (

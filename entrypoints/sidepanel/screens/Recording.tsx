@@ -3,8 +3,9 @@ import { useRouter } from '../router';
 import { LiveBubblePreview } from '../components/BubblePreview';
 import { DrawSwitch } from '../components/DrawSwitch';
 import { BubblePrompt } from '../components/BubblePrompt';
-import { command, sourceLabel, useNow, useRecordedTab, useRecorder } from '@/lib/capture';
-import type { Marker, MarkerKind, Segment } from '@/lib/types';
+import { command, useNow, useRecordedSource, useRecorder } from '@/lib/capture';
+import { sourceChip } from '@/lib/sourceChip';
+import type { CaptureMode, Marker, MarkerKind, Segment } from '@/lib/types';
 import { getRecording } from '@/lib/db';
 import { loadKeys } from '@/lib/keys';
 import { PROVIDERS } from '@/lib/llm';
@@ -32,8 +33,23 @@ export function useFollowRecorder(here: RecorderState['status']): RecorderState 
   return state;
 }
 
+/** The source chip: favicon and tab title, or the window or screen it records. Long names end in an ellipsis. */
+export function SourceChipView({ mode, style }: { mode: CaptureMode | undefined; style?: CSSProperties }) {
+  const chip = sourceChip(mode, mode ? MODE_LABEL[mode] : '', useRecordedSource());
+  if (!chip) return null;
+  // ICONS.window is the folder-shaped tab icon and ICONS.tab the window-shaped one, as on Home.
+  const icon = chip.icon === 'tab' ? ICONS.window : chip.icon === 'window' ? ICONS.tab : ICONS.screen;
+  return (
+    <span title={chip.title} style={{ maxWidth: 190, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 6px', borderRadius: 999, background: '#1F1F24', fontSize: 12, color: '#D4D5DA', ...style }}>
+      {chip.icon === 'favicon'
+        ? <img src={chip.iconUrl} alt="" width={16} height={16} style={{ borderRadius: 4, flexShrink: 0 }} />
+        : <span style={{ display: 'flex', flexShrink: 0 }}><Icon size={14}>{icon}</Icon></span>}
+      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chip.text}</span>
+    </span>
+  );
+}
+
 export function LiveHeader({ state, paused }: { state: RecorderState; paused?: boolean }) {
-  const tab = useRecordedTab();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 24px 0' }}>
       {paused ? (
@@ -41,7 +57,8 @@ export function LiveHeader({ state, paused }: { state: RecorderState; paused?: b
       ) : (
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 999, background: '#DC2626', color: '#FFFFFF', fontSize: 12, fontWeight: 600 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#FFFFFF' }} />Recording</span>
       )}
-      <span style={{ flexGrow: 1, fontSize: 13, color: '#B4B5BC' }}>{sourceLabel(state.mode, state.mode ? MODE_LABEL[state.mode] : '', tab)}</span>
+      <span style={{ flexGrow: 1 }} />
+      <SourceChipView mode={state.mode} />
     </div>
   );
 }

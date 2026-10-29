@@ -259,7 +259,7 @@ async function prepare(msg: MessageOf<'recorder/prepare'>): Promise<RecorderRepl
       status: 'armed', mode: msg.mode, quality: msg.quality,
       mic: Boolean(mic), micBlocked: msg.mic && !mic, sound: Boolean(sound),
     });
-    return ok;
+    return { ok: true, label: track.label };
   } catch (error) {
     cleanup.run((e) => console.error('Klipkord: could not release capture', e));
     console.error('Klipkord: could not start capture', error);
