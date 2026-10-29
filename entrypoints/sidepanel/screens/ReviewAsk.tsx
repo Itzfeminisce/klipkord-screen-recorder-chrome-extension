@@ -111,7 +111,7 @@ function Ask({ rec, seek }: ReviewContext) {
           </div>
         )}
         {result?.kind === 'no-answer' && (
-          <Notice title="This recording doesn’t say" body="Try asking it another way, or search the transcript for a word."
+          <Notice title="This recording doesn’t say" body="The transcript doesn’t answer that. Try asking it another way, or search the transcript for a word."
             icon={<><circle cx="12" cy="12" r="9" /><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01" /></>}>
             <button type="button" style={PRIMARY} onClick={() => replace('ReviewTranscript', { recordingId: rec.id })}>Open the transcript</button>
           </Notice>

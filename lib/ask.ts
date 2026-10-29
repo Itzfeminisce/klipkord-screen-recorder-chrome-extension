@@ -71,7 +71,7 @@ export type AskResult =
 export const ENGINE_FOOTER: Record<string, string> = {
   builtin: 'Answered on this computer by Chrome’s built-in AI.',
   ollama: 'Answered on this computer by Ollama.',
-  groq: 'Answered by Groq.',
+  groq: 'Answered by Groq. Only the transcript text was sent.',
 };
 
 /** Asks the first engine that can answer. An answer with no time the transcript backs counts as no answer. */

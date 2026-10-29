@@ -25,6 +25,7 @@ describe('manifest', () => {
     const commands = m.commands as Record<string, { suggested_key: { default: string } }>;
     expect(Object.keys(commands)).toHaveLength(4);
     expect(commands['toggle-draw']?.suggested_key.default).toBe('Alt+Shift+D');
+    expect(commands['toggle-draw']?.description).toBe('Draw on this page');
   });
 
   it('puts the extension key in manifest.key', async () => {

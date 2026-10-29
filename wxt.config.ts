@@ -41,8 +41,7 @@ export default defineConfig({
       'toggle-recording': { suggested_key: { default: 'Alt+Shift+R' }, description: 'Start or stop recording' },
       'toggle-pause': { suggested_key: { default: 'Alt+Shift+P' }, description: 'Pause or resume recording' },
       'add-marker': { suggested_key: { default: 'Alt+Shift+M' }, description: 'Add a marker' },
-      // Placeholder description until the designer's copy lands.
-      'toggle-draw': { suggested_key: { default: 'Alt+Shift+D' }, description: 'Draw on the page' },
+      'toggle-draw': { suggested_key: { default: 'Alt+Shift+D' }, description: 'Draw on this page' },
     },
     // ONNX Runtime compiles its bundled wasm; MV3 blocks that without 'wasm-unsafe-eval'.
     content_security_policy: {

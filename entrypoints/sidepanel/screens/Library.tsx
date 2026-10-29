@@ -21,7 +21,7 @@ function Thumb({ blob, length }: { blob?: Blob; length: number }) {
     return () => URL.revokeObjectURL(u);
   }, [blob]);
   return (
-    <span style={{ width: 96, height: 56, borderRadius: 8, background: '#26262B', position: 'relative', flexShrink: 0, overflow: 'hidden' }}>
+    <span style={{ width: 96, aspectRatio: '16 / 9', borderRadius: 8, background: '#26262B', position: 'relative', flexShrink: 0, overflow: 'hidden' }}>
       {url && <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
       <span style={{ position: 'absolute', right: 4, bottom: 4, padding: '1px 4px', borderRadius: 4, background: 'rgba(17,17,20,0.8)', color: '#FFFFFF', fontFamily: MONO, fontSize: 10 }}>{formatClock(length)}</span>
     </span>

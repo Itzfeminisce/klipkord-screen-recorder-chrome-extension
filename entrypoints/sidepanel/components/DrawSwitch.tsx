@@ -15,10 +15,12 @@ function Glyph({ children }: { children: ReactNode }) {
 
 type Card = { kind: 'access'; tabId: number; url: string } | { kind: 'web-only' } | null;
 
+const KEY = { fontFamily: "'Geist Mono', monospace", padding: '1px 5px', borderRadius: 4 } as const;
+
 const PRIMARY = { height: 36, padding: '0 14px', border: 'none', borderRadius: 10, background: '#F6F6F7', color: '#111114', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' } as const;
 
 function DrawCard({ icon, iconBg, iconFg, title, body, children }: {
-  icon: ReactNode; iconBg: string; iconFg: string; title: string; body: string; children: ReactNode;
+  icon: ReactNode; iconBg: string; iconFg: string; title: string; body: ReactNode; children: ReactNode;
 }) {
   return (
     <div role="status" style={{ padding: 14, borderRadius: 16, background: '#1A1A1F', color: '#F6F6F7', display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -98,7 +100,7 @@ export function DrawSwitch({ state, onRecordTab }: { state: RecorderState; onRec
         <span style={{ width: 32, height: 32, borderRadius: 9, background: '#3B1D12', color: '#FDBA8C', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Glyph>{PEN}</Glyph></span>
         <span style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span id="draw-switch-label" style={{ fontSize: 13, fontWeight: 600 }}>Draw on the page</span>
-          <span style={{ fontSize: 12, color: '#B4B5BC' }}>Pen, highlighter and click rings</span>
+          <span style={{ fontSize: 12, color: '#B4B5BC' }}>Pen, highlighter and click rings. Or press <span style={{ ...KEY, background: '#2C2C32', color: '#F6F6F7' }}>Alt+Shift+D</span> on the page.</span>
         </span>
         <button type="button" role="switch" aria-checked={checked} aria-labelledby="draw-switch-label" onClick={() => void toggle()}
           style={{ width: 44, height: 44, border: 'none', background: 'transparent', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -109,7 +111,7 @@ export function DrawSwitch({ state, onRecordTab }: { state: RecorderState; onRec
       </div>
       {card?.kind === 'access' && (
         <DrawCard icon={PEN} iconBg="#3B1D12" iconFg="#FDBA8C" title="Allow drawing on this page?"
-          body={`Chrome needs your OK before Klipkord can put a pen and click rings on ${hostOf(card.url)}. They only show while you record.`}>
+          body={<>Chrome needs your OK before Klipkord can put a pen and click rings on {hostOf(card.url)}. They only show while you record. Or press <span style={{ ...KEY, background: '#EBEBEE', color: '#44464D' }}>Alt+Shift+D</span> on the page to draw there without site access.</>}>
           <button type="button" style={PRIMARY} onClick={() => void allow(card.tabId, card.url).catch((error) => console.error('Klipkord: could not ask for drawing access', error))}>Allow on this site</button>
           <button type="button" style={{ ...PRIMARY, border: '1px solid #2C2C32', background: 'transparent', color: '#F6F6F7' }} onClick={() => setCard(null)}>Not now</button>
         </DrawCard>

@@ -197,7 +197,7 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
       </div>
 
       <div style={{ margin: '8px 16px 0', borderRadius: 14, background: '#111114', overflow: 'hidden' }}>
-        <div style={{ height: 188, position: 'relative', background: '#26262B' }}>
+        <div style={{ width: '100%', aspectRatio: '16 / 9', position: 'relative', background: '#26262B' }}>
           <video ref={video} src={src} playsInline preload="metadata" onLoadedMetadata={onMetadata} onDurationChange={settle} onSeeked={settle}
             onTimeUpdate={() => { settle(); onTime(); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
             onClick={toggle} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />

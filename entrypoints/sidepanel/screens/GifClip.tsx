@@ -26,7 +26,8 @@ type Phase =
   | { kind: 'idle' }
   | { kind: 'gif-making'; frame: number; total: number }
   | { kind: 'gif-saved'; name: string; size: number; blob: Blob; folder: FileSystemDirectoryHandle }
-  | { kind: 'gif-too-long' };
+  | { kind: 'gif-too-long' }
+  | { kind: 'gif-failed' };
 
 function seekTo(video: HTMLVideoElement, seconds: number): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -266,8 +267,9 @@ export default function GifClip() {
       await updateRecording(r.id, { savedTo: { folder: dir.name, at: Date.now(), files: [...(r.savedTo?.files ?? []), name] } });
       setPhase({ kind: 'gif-saved', name, size: blob.size, blob, folder: dir });
     } catch (error) {
-      if ((error as { name?: string }).name !== 'AbortError') console.error('Klipkord: could not make the GIF', error);
-      setPhase({ kind: 'idle' });
+      if ((error as { name?: string }).name === 'AbortError') return setPhase({ kind: 'idle' });
+      console.error('Klipkord: could not make the GIF', error);
+      setPhase({ kind: 'gif-failed' });
     }
   }
 
@@ -287,7 +289,7 @@ export default function GifClip() {
       <BackBar label="Back" onBack={back} title="Make a GIF" size={16} />
       <p style={{ margin: '8px 16px 0', fontSize: 13, lineHeight: 1.5, color: '#5F6168' }}>Pick up to 15 seconds. A short clip is easier to drop into a bug report or a chat.</p>
 
-      <div style={{ margin: '12px 16px 0', height: 200, borderRadius: 14, background: '#26262B', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ margin: '12px 16px 0', aspectRatio: '16 / 9', borderRadius: 14, background: '#26262B', position: 'relative', overflow: 'hidden' }}>
         {src && <video ref={video} src={src} muted playsInline preload="auto" onLoadedMetadata={onMetadata} onDurationChange={settle} onSeeked={settle} onTimeUpdate={onTime}
           onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
         <button type="button" aria-label="Play clip" onClick={toggle}
@@ -359,6 +361,15 @@ export default function GifClip() {
             icon={<svg width="16" height="16" viewBox="0 0 24 24" {...stroke} aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>}>
             <div style={{ display: 'flex', gap: 8 }}>
               <button type="button" onClick={() => setPhase({ kind: 'idle' })} style={SMALL_DARK}>Shorten the clip</button>
+            </div>
+          </Card>
+        )}
+        {phase.kind === 'gif-failed' && (
+          <Card tint={{ background: '#FEF2F2', color: '#B91C1C' }} title="Couldn’t make the GIF" body="Something went wrong while making it. Your recording is unchanged."
+            icon={<svg width="16" height="16" viewBox="0 0 24 24" {...stroke} aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16h.01" /></svg>}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => setPhase({ kind: 'idle' })} style={SMALL_DARK}>Try again</button>
+              <button type="button" onClick={back} style={SMALL_OUTLINE}>Back to saving</button>
             </div>
           </Card>
         )}

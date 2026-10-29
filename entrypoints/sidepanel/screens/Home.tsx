@@ -320,7 +320,7 @@ export default function Home() {
           </div>
           <button type="button" onClick={() => navigate('Review', { recordingId: last.id })}
             style={{ padding: 10, borderRadius: 14, background: '#FFFFFF', border: '1px solid #E8E8EB', color: '#111114', font: 'inherit', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
-            <Thumb recording={last} width={64} height={40} />
+            <Thumb recording={last} width={64} />
             <span style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
               <span style={{ fontSize: 14, fontWeight: 500 }}>{last.title}</span>
               <span style={{ fontSize: 12, color: '#6E7079' }}>{[last.summary && STYLE_NAMES[last.summary.style], dayAndTime(last.createdAt)].filter(Boolean).join(' · ')}</span>
@@ -333,7 +333,7 @@ export default function Home() {
 }
 
 /** Video thumbnail (when one exists) with the duration in the corner. */
-export function Thumb({ recording, width, height }: { recording: Recording; width: number; height: number }) {
+export function Thumb({ recording, width }: { recording: Recording; width: number }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!recording.thumbnail) return;
@@ -342,7 +342,7 @@ export function Thumb({ recording, width, height }: { recording: Recording; widt
     return () => URL.revokeObjectURL(u);
   }, [recording.thumbnail]);
   return (
-    <span style={{ width, height, borderRadius: width > 100 ? 10 : 8, background: url ? `#26262B center / cover url(${url})` : '#26262B', position: 'relative', flexShrink: 0 }}>
+    <span style={{ width, aspectRatio: '16 / 9', borderRadius: width > 100 ? 10 : 8, background: url ? `#26262B center / cover url(${url})` : '#26262B', position: 'relative', flexShrink: 0 }}>
       <span style={{ position: 'absolute', right: 4, bottom: 4, padding: '1px 4px', borderRadius: 4, background: 'rgba(17,17,20,0.8)', color: '#FFFFFF', fontFamily: MONO, fontSize: width > 100 ? 10 : 9 }}>{shortClock(recording.duration)}</span>
     </span>
   );

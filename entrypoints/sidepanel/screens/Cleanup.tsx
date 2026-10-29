@@ -160,7 +160,7 @@ export default function Cleanup() {
       </div>
 
       {!loading && !nothing && (
-        <p style={{ margin: '8px 24px 0', fontSize: 13, lineHeight: 1.45, color: '#5F6168' }}>Klipkord found {items.length} {items.length === 1 ? 'thing' : 'things'} you can cut. Untick any you want to keep.</p>
+        <p style={{ margin: '8px 24px 0', fontSize: 13, lineHeight: 1.45, color: '#5F6168' }}>Klipkord found {items.length} {items.length === 1 ? 'thing' : 'things'} you can cut. {items.length === 1 ? 'Untick it if you want to keep it.' : 'Untick any you want to keep.'}</p>
       )}
 
       {prompt && rec && (
@@ -214,7 +214,7 @@ export default function Cleanup() {
           <video ref={video} src={src} hidden playsInline preload="auto" onTimeUpdate={onTime} onPlay={() => setPreviewing(true)} onPause={() => setPreviewing(false)} onEnded={() => setPreviewing(false)} />
           <button type="button" onClick={preview} aria-pressed={previewing} disabled={!src}
             style={{ margin: '12px 16px 0', height: 44, border: '1px solid #E8E8EB', borderRadius: 12, background: '#FFFFFF', font: 'inherit', fontSize: 14, fontWeight: 500, color: '#111114', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="#111114" aria-hidden="true"><path d="M8 5l12 7-12 7z" /></svg>Preview with these cuts
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#111114" aria-hidden="true"><path d="M8 5l12 7-12 7z" /></svg>{previewing ? 'Stop preview' : 'Preview with these cuts'}
           </button>
 
           <div style={{ padding: '14px 24px 4px', fontSize: 12, fontWeight: 600, color: '#6E7079' }}>What was found</div>

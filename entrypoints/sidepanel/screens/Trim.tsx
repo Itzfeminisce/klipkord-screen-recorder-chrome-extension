@@ -236,7 +236,7 @@ export default function Trim() {
           style={{ height: 36, padding: '0 14px', border: 'none', borderRadius: 10, background: '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Done</button>
       </div>
 
-      <div style={{ margin: '12px 16px 0', height: 200, borderRadius: 14, background: '#26262B', position: 'relative', overflow: 'hidden' }}>
+      <div style={{ margin: '12px 16px 0', aspectRatio: '16 / 9', borderRadius: 14, background: '#26262B', position: 'relative', overflow: 'hidden' }}>
         <video ref={video} src={src} playsInline preload="auto" onLoadedMetadata={onMetadata} onDurationChange={settle} onSeeked={settle}
           onTimeUpdate={() => { settle(); onTime(); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
           onClick={toggle} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
