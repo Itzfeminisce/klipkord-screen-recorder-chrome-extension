@@ -36,6 +36,39 @@
     </table>
     <h2>Machine</h2>
     <table><tbody id="machine"></tbody></table>
+    <h2>v2 checks</h2>
+    <p>Four probes for Klipkord v2. Run each, answer the bubble questions, then press Copy v2 results.</p>
+    <button id="v2-copy" type="button">Copy v2 results</button> <span id="v2-copy-status" role="status"></span>
+    <table>
+      <thead><tr><th>Probe</th><th>Run</th><th>Status</th><th>Numbers</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Floating bubble<p class="hint">Open the bubble, then drag it, switch to another app, open and close the side panel, and record a window and an entire screen with v1. Note each answer.</p></td>
+          <td><button id="v2-bubble-doc" type="button">Open bubble</button><br /><button id="v2-bubble-video-btn" type="button">Open video fallback</button><video id="v2-bubble-video" muted playsinline hidden></video></td>
+          <td><span id="v2-bubble-status" role="status"></span><div id="v2-bubble-answers"></div></td>
+          <td class="lines" id="v2-bubble-numbers"></td>
+        </tr>
+        <tr>
+          <td>Word timings<p class="hint">Runs whisper-tiny then whisper-base (wasm, q8) with word times on 60 s of speech. Pick a speech file, or leave it empty to record 60 s from the microphone.</p></td>
+          <td><input id="v2-words-file" type="file" accept="audio/*,video/*" /><br /><button id="v2-words-run" type="button">Run</button> <button id="v2-words-stop" type="button" disabled>Stop</button></td>
+          <td id="v2-words-status" role="status"></td>
+          <td class="lines" id="v2-words-numbers"></td>
+        </tr>
+        <tr>
+          <td>Draw<p class="hint">Opens huggingface.co in a new tab and draws a moving magenta stroke over it. Come back, press Capture a tab and pick that tab.</p></td>
+          <td><button id="v2-draw-inject" type="button">Draw on a test tab</button><br /><button id="v2-draw-capture" type="button">Capture a tab</button></td>
+          <td id="v2-draw-status" role="status"></td>
+          <td class="lines"><div id="v2-draw-numbers"></div><video id="v2-draw-video" muted playsinline style="width:240px;background:#000;display:block"></video></td>
+        </tr>
+        <tr>
+          <td>GIF<p class="hint">Encodes 15 s of 640 px screen-like frames at 12 fps with gifenc in a worker. No prompts.</p></td>
+          <td><button id="v2-gif-run" type="button">Run</button></td>
+          <td id="v2-gif-status" role="status"></td>
+          <td class="lines"><div id="v2-gif-numbers"></div><img id="v2-gif-img" alt="Encoded test GIF" hidden style="width:240px;display:block" /></td>
+        </tr>
+      </tbody>
+    </table>
     <script type="module" src="./main.ts"></script>
+    <script type="module" src="./v2.ts"></script>
   </body>
 </html>

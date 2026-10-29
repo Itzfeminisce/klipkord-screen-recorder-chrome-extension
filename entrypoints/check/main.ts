@@ -4,6 +4,7 @@ import { StoppedError, TimeoutError, cleanupStack, guard, pause, watchdog } from
 import { downloadSummary, frameStats, levelDb, mean, megabytes, realTimeFactor, round } from '@/lib/check/stats';
 import type { FileProgress } from '@/lib/check/stats';
 import { builtinAiNote, captureTarget, chromeMajor, smallSkipNote, soundStatus } from '@/lib/check/verdicts';
+import { WhisperWorker } from './whisper-client';
 
 const HINTS: Record<TestId, string> = {
   mp4: 'Records 10 s of a test animation with a tone, once as MP4 and once as WebM. No prompts.',
@@ -538,42 +539,6 @@ const CHUNK_S = 10;
 const CHUNKS = 3;
 const MINUTE = 60_000;
 const PROBE_URL = 'https://huggingface.co/onnx-community/whisper-tiny/resolve/main/config.json';
-
-type Answer = Record<string, unknown>;
-
-class WhisperWorker {
-  private worker = new Worker(new URL('./whisper.worker.ts', import.meta.url), { type: 'module' });
-  private waiting: { resolve: (m: Answer) => void; reject: (e: Error) => void }[] = [];
-  onProgress: ((m: Answer) => void) | null = null;
-
-  constructor() {
-    this.worker.onmessage = (e: MessageEvent<Answer>) => {
-      if (e.data.type === 'progress') return this.onProgress?.(e.data);
-      const w = this.waiting.shift();
-      if (e.data.type === 'error') w?.reject(new Error(String(e.data.message)));
-      else w?.resolve(e.data);
-    };
-    this.worker.onerror = (e) => this.failAll(new Error(`Whisper worker: ${e.message || 'could not start'}`));
-  }
-
-  private failAll(error: Error) {
-    for (const w of this.waiting.splice(0)) w.reject(error);
-  }
-
-  // The worker answers each message once, in order; progress messages are not answers.
-  send(msg: unknown, opts: { ms: number; what: string; signal?: AbortSignal }, transfer: Transferable[] = []) {
-    const answer = new Promise<Answer>((resolve, reject) => {
-      this.waiting.push({ resolve, reject });
-      this.worker.postMessage(msg, transfer);
-    });
-    return guard(answer, opts);
-  }
-
-  terminate() {
-    this.worker.terminate();
-    this.failAll(new StoppedError());
-  }
-}
 
 // Shows the numbers in the table as they change, so a timeout or Stop still leaves them on screen.
 function liveNumbers(run: Run) {
