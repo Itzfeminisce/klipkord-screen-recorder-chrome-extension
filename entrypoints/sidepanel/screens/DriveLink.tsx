@@ -57,6 +57,7 @@ export default function DriveLink() {
   const [rec, setRec] = useState<Recording | null | undefined>();
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
   const blob = useRef<Blob | null>(null);
   const session = useRef<string | null>(null);
   const percent = useRef(0);
@@ -143,12 +144,15 @@ export default function DriveLink() {
   }
 
   async function connect() {
+    setBusy(true);
     try {
       const token = await connectGoogle();
       await begin(token);
     } catch (error) {
       console.error('Klipkord: could not connect Google', error);
       if (!navigator.onLine) setPhase({ kind: 'drive-offline' });
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -186,7 +190,10 @@ export default function DriveLink() {
     await deleteFile(FETCH, token, share.fileId);
     await removeShare(rec!.id);
   });
-  const copy = (link: string) => navigator.clipboard.writeText(link).catch((error) => console.error('Klipkord: could not copy the link', error));
+  const copy = (link: string) => navigator.clipboard.writeText(link).then(() => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, (error) => console.error('Klipkord: could not copy the link', error));
 
   if (rec === undefined) return <main className="screen screen-center"><Spinner /></main>;
   if (!rec) return <main className="screen screen-center"><BackBar label="Back" onBack={back} /></main>;
@@ -204,7 +211,9 @@ export default function DriveLink() {
           body="Klipkord asks for the smallest permission Google has. It can only see files that Klipkord itself puts in your Drive. It cannot open, list or change anything else you have there.">
           <div style={{ padding: '10px 12px', borderRadius: 12, background: '#EBEBEE', fontSize: 12, lineHeight: 1.5, color: '#44464D' }}>Nothing is uploaded until you press Share. You can disconnect in Settings at any time.</div>
           {/* Without a client id in the build there is nothing to connect to. */}
-          <button type="button" onClick={() => void connect()} disabled={!configured} style={{ ...SMALL_DARK, opacity: configured ? 1 : 0.5, cursor: configured ? 'pointer' : 'default' }}>Connect Google</button>
+          <button type="button" onClick={() => void connect()} disabled={!configured || busy} style={{ ...SMALL_DARK, display: 'flex', alignItems: 'center', gap: 8, opacity: configured ? 1 : 0.5, cursor: configured && !busy ? 'pointer' : 'default' }}>
+            {busy && <Spinner label="Connecting" size={14} />}Connect Google
+          </button>
         </StateCard>
       )}
 
@@ -241,12 +250,12 @@ export default function DriveLink() {
         </StateCard>
       )}
 
-      {phase.kind === 'ready' && <Ready share={phase.share} busy={busy} onCopy={copy} onStop={() => void unshare(phase.share)} onDelete={() => void remove(phase.share)} />}
+      {phase.kind === 'ready' && <Ready share={phase.share} busy={busy} copied={copied} onCopy={copy} onStop={() => void unshare(phase.share)} onDelete={() => void remove(phase.share)} />}
     </main>
   );
 }
 
-function Ready({ share, busy, onCopy, onStop, onDelete }: { share: Share; busy: boolean; onCopy: (link: string) => void; onStop: () => void; onDelete: () => void }) {
+function Ready({ share, busy, copied, onCopy, onStop, onDelete }: { share: Share; busy: boolean; copied: boolean; onCopy: (link: string) => void; onStop: () => void; onDelete: () => void }) {
   return (
     <>
       <div style={{ margin: '12px 16px 0', display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -260,7 +269,9 @@ function Ready({ share, busy, onCopy, onStop, onDelete }: { share: Share; busy: 
         <label htmlFor="share-link" style={{ fontSize: 12, color: '#6E7079' }}>View link</label>
         <input id="share-link" type="text" readOnly value={share.link} onFocus={(e) => e.currentTarget.select()}
           style={{ height: 44, boxSizing: 'border-box', padding: '0 12px', border: '1px solid #E8E8EB', borderRadius: 10, background: '#F6F6F7', fontFamily: MONO, fontSize: 12, color: '#111114' }} />
-        <button type="button" onClick={() => onCopy(share.link)} style={{ height: 48, border: 'none', borderRadius: 12, background: '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>Copy link</button>
+        <button type="button" onClick={() => onCopy(share.link)} style={{ height: 48, border: 'none', borderRadius: 12, background: '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
+          {copied && <svg width="16" height="16" viewBox="0 0 24 24" {...stroke} aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}Copy link
+        </button>
       </div>
 
       <div style={{ ...CARD, margin: '10px 16px 0', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -286,7 +297,7 @@ function Ready({ share, busy, onCopy, onStop, onDelete }: { share: Share; busy: 
       <div style={{ margin: '16px 16px 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 500, color: '#5F6168' }}>Stop sharing</span>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-          <button type="button" onClick={onStop} disabled={busy} style={OUTLINE}>Stop sharing</button>
+          <button type="button" onClick={onStop} disabled={busy} style={{ ...OUTLINE, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>{busy && <Spinner label="Working" size={14} />}Stop sharing</button>
           <button type="button" onClick={onDelete} disabled={busy} style={{ ...OUTLINE, color: '#B91C1C' }}>Delete from Drive</button>
         </div>
         <span style={{ fontSize: 12, lineHeight: 1.45, color: '#6E7079' }}>Stop sharing turns the link off and keeps the file in your Drive. Delete from Drive removes the file too. The original recording stays in Klipkord either way.</span>
