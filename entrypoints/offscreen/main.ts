@@ -6,7 +6,7 @@ import {
   IDLE, VIDEO_BITRATE, chooseMime, chooseVoiceMime, clockElapsed, clockPause, clockResume, clockStart, containerOf,
   createChunkWriter, type EndReason, type RecorderState,
 } from '@/lib/recorder';
-import type { RecorderReply } from '@/lib/capture';
+import { pickSource, type RecorderReply } from '@/lib/capture';
 import type { Bubble } from '@/lib/bubble';
 import { createCompositor, type Compositor, type Ticker } from '@/lib/compositor';
 import { freeBytes, shouldAutoStop } from '@/lib/storageMath';
@@ -15,7 +15,8 @@ import {
   cancelTranscript, currentStatus, finishTranscript, pauseTranscript, startTranscript, stopCapture, transcriptPatch, useGroq,
 } from './transcript';
 
-// The offscreen document owns every stream and recorder, so recording goes on with the side panel closed.
+// The recorder tab owns every stream and recorder, so recording goes on with the side panel closed.
+// It opens Chrome's picker itself: a picked stream id only works in the page that asked for it.
 
 let state: RecorderState = IDLE;
 
@@ -82,8 +83,8 @@ const FLUSH_MS = 30_000;
 const ok: RecorderReply = { ok: true };
 const fail = (error: string): RecorderReply => ({ ok: false, error });
 
-async function openScreen(msg: MessageOf<'recorder/prepare'>): Promise<MediaStream> {
-  const source = { chromeMediaSource: 'desktop', chromeMediaSourceId: msg.streamId };
+async function openScreen(msg: MessageOf<'recorder/prepare'>, streamId: string, withSound: boolean): Promise<MediaStream> {
+  const source = { chromeMediaSource: 'desktop', chromeMediaSourceId: streamId };
   const video = { mandatory: { ...source, maxWidth: msg.maxWidth, maxHeight: msg.maxHeight, maxFrameRate: 30 } } as MediaTrackConstraints;
   const open = (audio: boolean) =>
     guard(navigator.mediaDevices.getUserMedia({ audio: audio ? ({ mandatory: source } as MediaTrackConstraints) : false, video }), {
@@ -91,7 +92,7 @@ async function openScreen(msg: MessageOf<'recorder/prepare'>): Promise<MediaStre
       what: 'Screen capture',
       dispose: stopTracks,
     });
-  if (!msg.sound) return open(false);
+  if (!withSound) return open(false);
   try {
     return await open(true);
   } catch (error) {
@@ -156,7 +157,12 @@ async function prepare(msg: MessageOf<'recorder/prepare'>): Promise<RecorderRepl
   await teardown();
   const cleanup = cleanupStack();
   try {
-    const video = await openScreen(msg);
+    const picked = await pickSource(msg.mode, msg.sound);
+    if (!picked) {
+      setState(IDLE);
+      return { ok: false, cancelled: true };
+    }
+    const video = await openScreen(msg, picked.streamId, msg.sound && picked.canRequestAudioTrack);
     cleanup.add(() => stopTracks(video));
     const mic = msg.mic ? await openMic() : null;
     cleanup.add(() => stopTracks(mic));

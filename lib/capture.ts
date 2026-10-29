@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { send, type Message } from './messages';
+import { send, type Message, type MessageOf } from './messages';
 import { IDLE, type RecorderState } from './recorder';
 import type { CaptureMode, Quality } from './types';
 
-export const OFFSCREEN_PATH = '/offscreen.html';
+export const RECORDER_PATH = '/offscreen.html';
 const STATE_KEY = 'recorder';
 const START_KEY = 'startRequested';
 
@@ -25,7 +25,7 @@ export function captureSize(quality: Quality, screenWidth: number, screenHeight:
 
 export interface Picked { streamId: string; canRequestAudioTrack: boolean }
 
-/** Chrome's picker from the side panel; null when the person cancels. The id is used by the offscreen document. */
+/** Chrome's picker; null when the person cancels. Its stream id works only in the page that called it. */
 export function pickSource(mode: CaptureMode, sound: boolean): Promise<Picked | null> {
   return new Promise((resolve) => {
     chrome.desktopCapture.chooseDesktopMedia(pickerSources(mode, sound) as chrome.desktopCapture.DesktopCaptureSourceType[], (streamId, options) => {
@@ -34,26 +34,59 @@ export function pickSource(mode: CaptureMode, sound: boolean): Promise<Picked | 
   });
 }
 
-export async function ensureOffscreen(): Promise<void> {
-  const url = browser.runtime.getURL(OFFSCREEN_PATH);
-  const contexts = await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT], documentUrls: [url] });
-  if (contexts.length) return;
-  await chrome.offscreen.createDocument({
-    url: OFFSCREEN_PATH,
-    reasons: [chrome.offscreen.Reason.USER_MEDIA, chrome.offscreen.Reason.DISPLAY_MEDIA],
-    justification: 'Records the screen, mic and sound while the side panel is closed.',
-  });
+async function recorderTabIds(): Promise<number[]> {
+  const url = browser.runtime.getURL(RECORDER_PATH);
+  const contexts = await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.TAB], documentUrls: [url] });
+  return contexts.map((c) => c.tabId).filter((id) => id >= 0);
 }
 
-export async function hasOffscreen(): Promise<boolean> {
-  const url = browser.runtime.getURL(OFFSCREEN_PATH);
-  const contexts = await chrome.runtime.getContexts({ contextTypes: [chrome.runtime.ContextType.OFFSCREEN_DOCUMENT], documentUrls: [url] });
-  return contexts.length > 0;
+export async function hasRecorder(): Promise<boolean> {
+  return (await recorderTabIds()).length > 0;
 }
 
-export interface RecorderReply { ok: boolean; error?: string }
+/**
+ * The pinned recorder tab, opened when missing. An offscreen document cannot use a picked stream id
+ * (Chrome: "AbortError: Error starting tab capture"), so the picker and the recording share this tab.
+ */
+export async function ensureRecorder(windowId?: number): Promise<chrome.tabs.Tab> {
+  const [id] = await recorderTabIds();
+  if (id !== undefined) return chrome.tabs.get(id);
+  const tab = await chrome.tabs.create({ url: RECORDER_PATH, pinned: true, active: false, windowId });
+  for (let i = 0; i < 100; i++) {
+    if ((await send({ type: 'offscreen/busy' })) !== undefined) return tab;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error('The recorder tab did not load');
+}
 
-/** Sends a command to the offscreen recorder and waits for its answer. */
+export async function closeRecorder(): Promise<void> {
+  const ids = await recorderTabIds();
+  if (ids.length) await chrome.tabs.remove(ids);
+}
+
+/**
+ * Prepares the recorder: Chrome's picker opens over the recorder tab, shown for the pick, then the
+ * person's tab comes back. `cancelled` when nothing was picked.
+ */
+export async function prepareRecorder(msg: Omit<MessageOf<'recorder/prepare'>, 'type'>): Promise<RecorderReply> {
+  const [previous] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const recorder = await ensureRecorder(previous?.windowId);
+  if (recorder.id === undefined) throw new Error('The recorder tab has no id');
+  await chrome.tabs.update(recorder.id, { active: true });
+  if (previous && recorder.windowId !== previous.windowId) await chrome.windows.update(recorder.windowId, { focused: true });
+  try {
+    return await command({ type: 'recorder/prepare', ...msg });
+  } finally {
+    if (previous?.id !== undefined && previous.id !== recorder.id) {
+      await chrome.tabs.update(previous.id, { active: true }).catch((error) => console.error('Klipkord: could not return to the tab', error));
+      if (recorder.windowId !== previous.windowId) await chrome.windows.update(previous.windowId, { focused: true }).catch(() => undefined);
+    }
+  }
+}
+
+export interface RecorderReply { ok: boolean; error?: string; cancelled?: boolean }
+
+/** Sends a command to the recorder tab and waits for its answer. */
 export async function command(msg: Message): Promise<RecorderReply> {
   return (await send<RecorderReply>(msg)) ?? { ok: false, error: 'no recorder' };
 }

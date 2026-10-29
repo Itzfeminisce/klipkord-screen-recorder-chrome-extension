@@ -8,8 +8,8 @@ export type Message =
   | { type: 'recording/pause' }
   | { type: 'marker/add'; kind: MarkerKind }
   | { type: 'marker/undo'; recordingId: string; id: string }   // the shortcut toast's Undo (T5)
-  // Side panel and background → offscreen recorder (T3).
-  | { type: 'recorder/prepare'; streamId: string; mode: CaptureMode; mic: boolean; sound: boolean; quality: Quality; maxWidth: number; maxHeight: number; camera: boolean; bubble: Settings['bubble'] }
+  // Side panel and background → the recorder tab (T3). Prepare opens Chrome's picker there.
+  | { type: 'recorder/prepare'; mode: CaptureMode; mic: boolean; sound: boolean; quality: Quality; maxWidth: number; maxHeight: number; camera: boolean; bubble: Settings['bubble'] }
   | { type: 'recorder/bubble'; bubble: Settings['bubble'] }   // corner or size changed (T4)
   | { type: 'recorder/begin' }
   | { type: 'recorder/pause' }
@@ -19,7 +19,7 @@ export type Message =
   | { type: 'recorder/restart' }
   | { type: 'recorder/discard' }
   | { type: 'recorder/mute'; muted: boolean }
-  // Offscreen recorder → background (badge, session state).
+  // Recorder tab → background (badge, session state).
   | { type: 'recorder/state'; state: RecorderState }
   | { type: 'recorder/tick'; elapsed: number }
   // Live transcript (T6): offscreen ↔ background and side panel.

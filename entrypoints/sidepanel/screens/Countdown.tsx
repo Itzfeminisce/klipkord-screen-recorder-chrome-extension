@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from '../router';
 import { getSettings } from '@/lib/settings';
-import { captureSize, command, ensureOffscreen, getRecorderState, hasOffscreen, pickSource } from '@/lib/capture';
+import { captureSize, command, getRecorderState, hasRecorder, prepareRecorder } from '@/lib/capture';
 import type { Settings } from '@/lib/types';
 import { Brand, ICONS, MODE_LABEL, MONO, StateCard } from './Home';
 
@@ -25,18 +25,18 @@ export default function Countdown() {
       const settings = await getSettings();
       setCapture(settings.capture);
       // Restart from Paused keeps the picked source: count down again on the same streams.
-      if ((await getRecorderState()).status === 'armed' && (await hasOffscreen())) return setPhase('counting');
+      if ((await getRecorderState()).status === 'armed' && (await hasRecorder())) return setPhase('counting');
       const { mode, mic, sound, quality, camera } = settings.capture;
-      const picked = await pickSource(mode, sound);
-      if (!picked) return setPhase('cancelled');
-      await ensureOffscreen();
       const dpr = window.devicePixelRatio || 1;
       const size = captureSize(quality, screen.width * dpr, screen.height * dpr);
-      const reply = await command({ type: 'recorder/prepare', streamId: picked.streamId, mode, mic, sound: sound && picked.canRequestAudioTrack, quality, ...size, camera, bubble: settings.bubble });
+      // The count starts only once a source is picked and the recorder holds it.
+      const reply = await prepareRecorder({ mode, mic, sound, quality, ...size, camera, bubble: settings.bubble });
+      if (reply.cancelled) return setPhase('cancelled');
       if (!reply.ok) throw new Error(reply.error);
       setPhase('counting');
     } catch (error) {
-      console.error('Klipkord: could not start capture', error);
+      // No frame for a failed start: back to Home, said in the console.
+      console.error('Klipkord: could not start recording', error);
       replace('Home');
     } finally {
       picking.current = false;
@@ -86,6 +86,8 @@ export default function Countdown() {
         </div>
       )}
 
+      {phase === 'cancelled' && <div style={{ flexGrow: 1 }} />}
+      {phase !== 'picking' && phase !== 'cancelled' && (
       <div style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 28, padding: '0 24px' }}>
         <div style={{ width: 180, height: 180, borderRadius: '50%', border: '6px solid #2C2C32', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
           <span style={{ position: 'absolute', inset: -6, borderRadius: '50%', border: '6px solid transparent', borderTopColor: '#C2410C', borderRightColor: phase === 'counting' && shown <= 2 ? '#C2410C' : 'transparent', borderBottomColor: phase === 'counting' && shown <= 1 ? '#C2410C' : 'transparent' }} />
@@ -101,7 +103,9 @@ export default function Countdown() {
           ))}
         </div>
       </div>
+      )}
 
+      {phase !== 'picking' && (<>
       <div style={{ margin: '0 24px', padding: '12px 14px', borderRadius: 12, background: '#1F1F24', fontSize: 13, lineHeight: 1.5, color: '#D4D5DA' }}>
         Tip: press <span style={{ fontFamily: MONO, padding: '1px 5px', borderRadius: 4, background: '#2C2C32', color: '#F6F6F7' }}>Alt+Shift+M</span> to mark a moment without opening the panel.
       </div>
@@ -110,6 +114,7 @@ export default function Countdown() {
         <button type="button" onClick={() => void cancel()} disabled={phase === 'starting'} style={{ ...DARK_BUTTON, background: '#1F1F24', color: '#F6F6F7' }}>Cancel</button>
         <button type="button" onClick={() => void begin()} disabled={phase !== 'counting'} style={{ ...DARK_BUTTON, background: '#F6F6F7', color: '#111114', opacity: phase === 'counting' ? 1 : 0.5 }}>Start now</button>
       </div>
+      </>)}
     </main>
   );
 }

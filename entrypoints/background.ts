@@ -1,6 +1,6 @@
 import { markInterrupted } from '@/lib/db';
 import { commandMessage, onMessage, send } from '@/lib/messages';
-import { getRecorderState, hasOffscreen, requestStart, setRecorderState } from '@/lib/capture';
+import { RECORDER_PATH, closeRecorder, getRecorderState, hasRecorder, requestStart, setRecorderState } from '@/lib/capture';
 import { MARKER_LABEL, addMarker, markerTime, undoMarker } from '@/lib/markers';
 import { formatClock } from '@/lib/time';
 import type { MarkerKind } from '@/lib/types';
@@ -42,6 +42,7 @@ function showToast(label: string, time: string, recordingId: string, id: string)
 export default defineBackground(() => {
   // Kept in memory so a shortcut can act (and open the panel) without waiting on storage.
   let current: RecorderState = IDLE;
+  let recorderTab: number | undefined;
 
   browser.sidePanel
     .setPanelBehavior({ openPanelOnActionClick: true })
@@ -64,11 +65,11 @@ export default defineBackground(() => {
     setBadge(live ? clockElapsed(state.clock, Date.now()) : null, state.status === 'paused');
   }
 
-  // Wakes with a recording either still live in the offscreen document, or cut off (then Recovered offers it).
+  // Wakes with a recording either still live in the recorder tab, or cut off (then Recovered offers it).
   void (async () => {
     try {
       current = await getRecorderState();
-      if (await hasOffscreen()) return showState(current);
+      if (await hasRecorder()) return showState(current);
       if (current.status !== 'idle' && current.status !== 'done') await setRecorderState((current = IDLE));
       showState(current);
       await markInterrupted();
@@ -77,7 +78,8 @@ export default defineBackground(() => {
     }
   })();
 
-  onMessage((msg) => {
+  onMessage((msg, sender) => {
+    if (sender.tab?.id !== undefined && sender.url?.endsWith(RECORDER_PATH)) recorderTab = sender.tab.id;
     if (msg.type === 'marker/undo') {
       return undoMarker(msg.recordingId, msg.id).then(() => true, (error) => {
         console.error('Klipkord: could not undo the marker', error);
@@ -88,9 +90,9 @@ export default defineBackground(() => {
       current = msg.state;
       void setRecorderState(msg.state).catch((error) => console.error('Klipkord: could not save recorder state', error));
       showState(msg.state);
-      void closeOffscreenWhenIdle();
+      void closeRecorderWhenIdle();
     } else if (msg.type === 'transcript/idle') {
-      void closeOffscreenWhenIdle();
+      void closeRecorderWhenIdle();
     } else if (msg.type === 'transcript/config') {
       return loadTranscriptConfig().catch((error) => console.error('Klipkord: could not read transcript settings', error));
     } else if (msg.type === 'recorder/tick') {
@@ -99,12 +101,22 @@ export default defineBackground(() => {
     return undefined;
   });
 
-  // The offscreen document stays open while it holds a stream, runs a command or still transcribes.
-  async function closeOffscreenWhenIdle() {
+  // The recorder tab stays open while it holds a stream, runs a command or still transcribes.
+  async function closeRecorderWhenIdle() {
     if (current.status !== 'idle' && current.status !== 'done') return;
     if ((await send<boolean>({ type: 'offscreen/busy' })) !== false) return;
-    await chrome.offscreen.closeDocument().catch(() => undefined);
+    await closeRecorder().catch(() => undefined);
   }
+
+  // The person closed the recorder tab: whatever was live is cut off (Recovered offers it).
+  browser.tabs.onRemoved.addListener((tabId) => {
+    if (tabId !== recorderTab || current.status === 'idle' || current.status === 'done') return;
+    void (async () => {
+      await setRecorderState((current = IDLE));
+      showState(current);
+      await markInterrupted();
+    })().catch((error) => console.error('Klipkord: could not end the closed recording', error));
+  });
 
   // Saves the marker first; the toast is a bonus and stays silent where the page cannot take it (chrome:// pages).
   async function shortcutMarker(kind: MarkerKind, tabId: number | undefined) {
