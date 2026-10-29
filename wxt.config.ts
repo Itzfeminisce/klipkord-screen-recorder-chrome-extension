@@ -19,12 +19,13 @@ export default defineConfig({
     },
   },
   manifest: {
+    // O1: the Web Store item's public key goes in `manifest.key` (until then WXT_EXTENSION_KEY sets it).
     ...(extensionKey ? { key: extensionKey } : {}),
     name: 'Klipkord',
     description: 'Screen recorder in the Chrome side panel',
     // activeTab (granted by a shortcut) + scripting draw the marker toast in the active tab.
     permissions: ['sidePanel', 'offscreen', 'desktopCapture', 'storage', 'unlimitedStorage', 'identity', 'activeTab', 'scripting'],
-    // Requested only when the user turns on Penv Cloud, a cloud key or Ollama.
+    // Requested only when the user turns on Penv Cloud, a cloud key, Ollama or Google Drive.
     optional_host_permissions: [
       'https://penv.cloud/*',
       'https://api.groq.com/*',
@@ -32,6 +33,7 @@ export default defineConfig({
       'https://api.openai.com/*',
       'https://api.anthropic.com/*',
       'http://localhost:11434/*',
+      'https://www.googleapis.com/*',
     ],
     action: { default_title: 'Open Klipkord' },
     commands: {

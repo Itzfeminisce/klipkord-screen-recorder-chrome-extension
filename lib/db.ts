@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { Recording } from './types';
+import type { Recording, TranscriptModel } from './types';
 
 interface KlipkordDB extends DBSchema {
   recordings: { key: string; value: Recording; indexes: { status: string } };
@@ -7,22 +7,37 @@ interface KlipkordDB extends DBSchema {
   handles: { key: string; value: FileSystemDirectoryHandle };
 }
 
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 const FOLDER_KEY = 'folder';
 
 let dbPromise: Promise<IDBPDatabase<KlipkordDB>> | null = null;
 
 export function getDB(): Promise<IDBPDatabase<KlipkordDB>> {
   dbPromise ??= openDB<KlipkordDB>('klipkord', DB_VERSION, {
-    // Each future version only adds stores, so earlier data is kept.
-    upgrade(db, oldVersion) {
+    // Each version only adds stores or fills new fields, so earlier data is kept.
+    async upgrade(db, oldVersion, _newVersion, tx) {
       if (oldVersion < 1) {
         db.createObjectStore('recordings', { keyPath: 'id' }).createIndex('status', 'status');
         db.createObjectStore('handles');
       }
+      if (oldVersion >= 1 && oldVersion < 2) {
+        for (let cursor = await tx.objectStore('recordings').openCursor(); cursor; cursor = await cursor.continue()) {
+          await cursor.update(withV2Fields(cursor.value));
+        }
+      }
     },
   });
   return dbPromise;
+}
+
+/**
+ * Fills v2 fields on a v1 record. v1 kept no flag for the base pass, so a ready record with nothing pending
+ * counts as 'full' (its after-stop pass finished); anything else keeps the live text.
+ */
+export function withV2Fields(r: Recording): Recording {
+  if (r.transcriptModel) return r;
+  const transcriptModel: TranscriptModel = r.status === 'ready' && !r.transcriptPending ? 'full' : 'live';
+  return { ...r, transcriptModel };
 }
 
 /** Test helper: close and forget the cached connection. */
