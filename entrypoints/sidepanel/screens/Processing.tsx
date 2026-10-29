@@ -105,6 +105,7 @@ export default function Processing() {
             {rec.transcriptPending ? <span style={SPIN_DOT} aria-hidden="true" /> : <span style={DONE_DOT}><Icon size={14}>{ICONS.check}</Icon></span>}
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span style={{ fontSize: 14, fontWeight: 600 }}>{rec.transcriptPending ? 'Writing the transcript' : 'Transcript ready'}</span>
+              {rec.transcriptPending && <span style={{ fontSize: 12, color: '#6E7079' }}>Turning what you said into text.</span>}
               {!rec.transcriptPending && (
                 <span style={{ fontSize: 12, color: '#6E7079' }}>
                   {plural(rec.transcript.reduce((n, seg) => n + (seg.text.trim() ? seg.text.trim().split(/\s+/).length : 0), 0), 'word')} · {plural(rec.markers.length, 'marker')} · {plural(rec.notes.length, 'note')}

@@ -2,9 +2,42 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Klipkord recorder</title>
+    <style>
+      body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #F6F6F7; color: #111114; font-family: system-ui, sans-serif; }
+      .card { width: 440px; padding: 32px; box-sizing: border-box; border-radius: 20px; background: #FFFFFF; border: 1px solid #E8E8EB; display: flex; flex-direction: column; gap: 16px; }
+      .head { display: flex; align-items: center; gap: 10px; }
+      .logo { width: 28px; height: 28px; border-radius: 8px; background: #C2410C; display: flex; align-items: center; justify-content: center; }
+      .logo span { width: 10px; height: 10px; border-radius: 50%; background: #FFFFFF; }
+      .name { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; flex-grow: 1; }
+      .live { padding: 2px 8px; border-radius: 6px; background: #DC2626; color: #FFFFFF; font-family: ui-monospace, monospace; font-size: 12px; font-weight: 500; }
+      h1 { margin: 0; font-size: 26px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; }
+      p { margin: 0; font-size: 14px; line-height: 1.55; color: #5F6168; }
+      ul { list-style: none; margin: 0; padding: 12px 14px; border-radius: 12px; background: #F6F6F7; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+      li { display: flex; align-items: center; gap: 8px; }
+      li svg { color: #15803D; }
+      .note { font-size: 13px; line-height: 1.5; color: #6E7079; }
+      button { height: 48px; border: none; border-radius: 12px; background: #111114; color: #FFFFFF; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+      [hidden] { display: none !important; }
+    </style>
   </head>
   <body>
+    <main class="card">
+      <div class="head">
+        <span class="logo"><span></span></span>
+        <span class="name">Klipkord recorder</span>
+        <span class="live" id="live" hidden></span>
+      </div>
+      <h1>Leave this tab open</h1>
+      <p>This tab keeps your recording going while you work in other tabs. Chrome would stop the recording without it, so Klipkord pinned it for you.</p>
+      <ul>
+        <li id="voice" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Screen and voice are being recorded</li>
+        <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg>Saved on this computer as you go</li>
+      </ul>
+      <p class="note">Closing this tab stops the recording. Everything up to then is saved.</p>
+      <button type="button" id="back">Back to the recording</button>
+    </main>
     <script type="module" src="./main.ts"></script>
   </body>
 </html>
