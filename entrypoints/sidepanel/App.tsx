@@ -17,10 +17,7 @@ import Recording from './screens/Recording';
 import Paused from './screens/Paused';
 import Processing from './screens/Processing';
 import Overlay from './screens/Overlay';
-import Review from './screens/Review';
-import ReviewTranscript from './screens/ReviewTranscript';
-import ReviewComments from './screens/ReviewComments';
-import ReviewAsk from './screens/ReviewAsk';
+import ReviewTabs, { isReviewTab } from './screens/ReviewTabs';
 import NoteStyle from './screens/NoteStyle';
 import Trim from './screens/Trim';
 import EditTranscript from './screens/EditTranscript';
@@ -52,10 +49,10 @@ export const SCREENS: Record<ScreenName, ComponentType> = {
   Paused,
   Processing,
   Overlay,
-  Review,
-  ReviewTranscript,
-  ReviewComments,
-  ReviewAsk,
+  Review: ReviewTabs,
+  ReviewTranscript: ReviewTabs,
+  ReviewComments: ReviewTabs,
+  ReviewAsk: ReviewTabs,
   NoteStyle,
   Trim,
   EditTranscript,
@@ -94,7 +91,9 @@ export async function initialRoute(): Promise<Route> {
 function CurrentScreen() {
   const { route } = useRouter();
   const Screen = SCREENS[route.screen];
-  return <Screen key={`${route.screen}:${route.params.recordingId ?? ''}`} />;
+  // One key for the Review tabs, so the player stays mounted between them.
+  const name = isReviewTab(route.screen) ? 'Review' : route.screen;
+  return <Screen key={`${name}:${route.params.recordingId ?? ''}`} />;
 }
 
 export default function App() {

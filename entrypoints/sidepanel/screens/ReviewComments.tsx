@@ -2,14 +2,12 @@ import { useState } from 'react';
 import { editComment, newComment, resolveComment, resolvedLabel, splitComments } from '@/lib/comments';
 import { formatClock } from '@/lib/time';
 import type { Comment } from '@/lib/types';
-import { ReviewShell, type ReviewContext } from '../components/Player';
+import type { ReviewContext } from '../components/Player';
 import { dayAndTime } from './Home';
 
 const MONO = "var(--mono, 'Geist Mono', monospace)";
 
-export default function ReviewComments() {
-  return <ReviewShell tab="ReviewComments">{(ctx) => <Comments {...ctx} />}</ReviewShell>;
-}
+export const commentsTab = (ctx: ReviewContext) => <Comments {...ctx} />;
 
 function Card({ comment, onSeek, onResolve, onEdit }: { comment: Comment; onSeek: () => void; onResolve: () => void; onEdit: (text: string) => void }) {
   const [editing, setEditing] = useState(false);
