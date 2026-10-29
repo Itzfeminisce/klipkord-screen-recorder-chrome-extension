@@ -1,4 +1,4 @@
-import { markInterrupted } from '@/lib/db';
+import { markInterrupted, updateRecording } from '@/lib/db';
 import { commandMessage, onMessage, send } from '@/lib/messages';
 import { RECORDER_PATH, closeRecorder, getRecorderState, hasRecorder, requestStart, setRecorderState } from '@/lib/capture';
 import { MARKER_LABEL, addMarker, markerTime, undoMarker } from '@/lib/markers';
@@ -110,7 +110,13 @@ export default defineBackground(() => {
 
   // The person closed the recorder tab: whatever was live is cut off (Recovered offers it).
   browser.tabs.onRemoved.addListener((tabId) => {
-    if (tabId !== recorderTab || current.status === 'idle' || current.status === 'done') return;
+    if (tabId !== recorderTab) return;
+    // A transcript cut off after stop keeps the live text instead of staying pending.
+    if (current.status === 'done' && current.recordingId) {
+      void updateRecording(current.recordingId, (r) => (r.transcriptPending ? { transcriptPending: false } : null))
+        .catch((error) => console.error('Klipkord: could not end the closed transcript', error));
+    }
+    if (current.status === 'idle' || current.status === 'done') return;
     void (async () => {
       await setRecorderState((current = IDLE));
       showState(current);

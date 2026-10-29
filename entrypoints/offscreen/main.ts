@@ -205,6 +205,12 @@ function recorderStopped(recorder: MediaRecorder | null): Promise<void> {
   return guard(stopped, { ms: 5000, what: 'MediaRecorder stop' }).catch((error) => console.error('Klipkord: could not stop the recorder', error));
 }
 
+/** The height really recorded (already capped to the screen by the capture constraints). */
+function capturedHeight(picture: MediaStreamTrack, screen: MediaStream): number | undefined {
+  const h = picture.getSettings().height ?? screen.getVideoTracks()[0]?.getSettings().height;
+  return h ? Math.round(h) : undefined;
+}
+
 async function begin(): Promise<RecorderReply> {
   if (!streams || state.status !== 'armed') return fail('not armed');
   const id = crypto.randomUUID();
@@ -228,7 +234,7 @@ async function begin(): Promise<RecorderReply> {
   const now = Date.now();
   await putRecording({
     id, title: 'Untitled recording', createdAt: now, duration: 0, status: 'recording',
-    mode: state.mode ?? 'tab', quality, mime: containerOf(mime), bytes: 0,
+    mode: state.mode ?? 'tab', quality, height: capturedHeight(videoTrack, streams.video), mime: containerOf(mime), bytes: 0,
     markers: [], notes: [], comments: [], transcript: [], transcriptPending: false, edits: [],
   });
   video.start(1000);

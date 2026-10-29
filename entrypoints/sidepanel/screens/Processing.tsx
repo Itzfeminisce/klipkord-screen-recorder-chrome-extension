@@ -97,14 +97,14 @@ export default function Processing() {
           <span style={{ width: 24, height: 24, borderRadius: '50%', background: '#ECFDF3', color: '#15803D', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={14}>{ICONS.check}</Icon></span>
           <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <span style={{ fontSize: 14, fontWeight: 600 }}>Video saved</span>
-            {rec && <span style={{ fontSize: 12, color: '#6E7079' }}>{shortClock(rec.duration)} · {rec.quality} · {formatBytes(rec.bytes)}</span>}
+            {rec && <span style={{ fontSize: 12, color: '#6E7079' }}>{shortClock(rec.duration)} · {rec.height ? `${rec.height}p` : rec.quality} · {formatBytes(rec.bytes)}</span>}
           </span>
         </li>
         {rec && (
           <li style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
             {rec.transcriptPending ? <span style={SPIN_DOT} aria-hidden="true" /> : <span style={DONE_DOT}><Icon size={14}>{ICONS.check}</Icon></span>}
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>Transcript ready</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{rec.transcriptPending ? 'Writing the transcript' : 'Transcript ready'}</span>
               {!rec.transcriptPending && (
                 <span style={{ fontSize: 12, color: '#6E7079' }}>
                   {plural(rec.transcript.reduce((n, seg) => n + (seg.text.trim() ? seg.text.trim().split(/\s+/).length : 0), 0), 'word')} · {plural(rec.markers.length, 'marker')} · {plural(rec.notes.length, 'note')}

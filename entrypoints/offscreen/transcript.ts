@@ -1,3 +1,4 @@
+import { guard } from '@/lib/check/guard';
 import { updateRecording } from '@/lib/db';
 import { send } from '@/lib/messages';
 import type { Recording, Segment } from '@/lib/types';
@@ -13,6 +14,9 @@ import { BASE_MODEL, Whisper, liveModel } from '@/lib/transcribe/whisper';
 
 // Decoding a longer voice track at 16 kHz could use too much memory; the live text is kept instead.
 const BASE_PASS_MAX_MS = 90 * 60_000;
+// Past these the base pass gives up and the live text stays, so the transcript never stays pending.
+const BASE_DOWNLOAD_MS = 5 * 60_000;
+const baseRunMs = (durationMs: number) => Math.max(30_000, 3 * durationMs);
 
 interface Live {
   recordingId: string;
@@ -192,16 +196,28 @@ async function basePass(l: Live, durationMs: number): Promise<Segment[] | null> 
   try {
     const voice = await readVoice(l.recordingId);
     if (l.aborted || !voice.length) return null;
-    await ensureModel(BASE_MODEL);
-    const out: Segment[] = [];
-    for (const chunk of chunkAll(voice)) {
-      if (l.aborted) return null;
-      const text = await whisper!.transcribe(chunk.audio, l.config.language);
-      out.push({ start: chunk.start, end: chunk.end, text });
+    // Downloads base here when the person started recording before ModelDownload fetched it.
+    await guard(ensureModel(BASE_MODEL), { ms: BASE_DOWNLOAD_MS, what: 'whisper-base load' });
+    let timedOut = false;
+    const run = async () => {
+      const out: Segment[] = [];
+      for (const chunk of chunkAll(voice)) {
+        if (l.aborted || timedOut) return null;
+        const text = await whisper!.transcribe(chunk.audio, l.config.language);
+        out.push({ start: chunk.start, end: chunk.end, text });
+      }
+      return mergeSegments(out);
+    };
+    try {
+      return await guard(run(), { ms: baseRunMs(durationMs), what: 'whisper-base pass' });
+    } catch (error) {
+      timedOut = true;
+      throw error;
     }
-    return mergeSegments(out);
   } catch (error) {
     console.error('Klipkord: could not run the full transcript', error);
+    // A stuck worker is dropped; a newer take loads its own.
+    if (!live || live === l) releaseWhisper();
     return null;
   }
 }
@@ -212,10 +228,16 @@ export async function finishTranscript(recordingId: string, durationMs: number):
   if (!l) return void send({ type: 'transcript/idle' });
   l.phase = 'catch-up';
   report(l);
-  await l.queue.drain();
+  // Chunks still queued past the limit are dropped, so a stuck engine cannot hold the row.
+  const drained = await guard(l.queue.drain(), { ms: BASE_DOWNLOAD_MS + baseRunMs(durationMs), what: 'transcript catch-up' })
+    .then(() => true, (error) => {
+      console.error('Klipkord: could not catch up the transcript', error);
+      l.queue.cancel();
+      return false;
+    });
   await save(recordingId, { transcript: l.segments, transcriptPending: true });
   const q = l.queue.status;
-  if (!l.aborted && q.engine === 'local') {
+  if (drained && !l.aborted && q.engine === 'local') {
     l.phase = 'base';
     report(l);
     const base = await basePass(l, durationMs);

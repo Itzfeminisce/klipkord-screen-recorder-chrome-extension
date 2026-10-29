@@ -37,6 +37,7 @@ export interface Notes {
 export interface Recording {
   id: string; title: string; createdAt: number; duration: number;  // ms, after pauses
   status: RecordingStatus; mode: CaptureMode; quality: Quality;
+  height?: number;                                     // px actually captured; older records only have quality
   mime: string;                                        // 'video/mp4' or 'video/webm'
   bytes: number; thumbnail?: Blob;
   markers: Marker[]; notes: TimedNote[]; comments: Comment[];
