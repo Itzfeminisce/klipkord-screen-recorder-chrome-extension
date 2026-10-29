@@ -170,7 +170,7 @@ export function NotesView({ notes, onSeek }: { notes: Notes; onSeek?: (ms: numbe
 }
 
 /** Review's Notes tab body. While the notes are being written it shows progress, then fills in. */
-export default function NotesBody({ recordingId, onSeek }: { recordingId: string | undefined; onSeek?: (ms: number) => void }) {
+export default function NotesBody({ recordingId, onSeek, top }: { recordingId: string | undefined; onSeek?: (ms: number) => void; top?: ReactNode }) {
   const progress = useNotesJob(recordingId);
   const [rec, setRec] = useState<Recording | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -192,6 +192,7 @@ export default function NotesBody({ recordingId, onSeek }: { recordingId: string
 
   return (
     <div style={body}>
+      {top}
       {working && progress && (
         <div style={{ padding: 14, borderRadius: 16, background: '#FFFFFF', border: '1px solid #E8E8EB', display: 'flex', gap: 12 }}>
           <span style={{ width: 24, height: 24, borderRadius: '50%', border: '3px solid #F1F1F3', borderTopColor: '#C2410C', boxSizing: 'border-box', flexShrink: 0 }} aria-hidden="true" />

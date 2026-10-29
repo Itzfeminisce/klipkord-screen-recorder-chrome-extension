@@ -9,7 +9,7 @@ import { IDLE_MS, controlsVisible, currentCaption, currentChapterTitle, hideDela
 import { formatClock } from '@/lib/time';
 import { videoStore } from '@/lib/videoStore';
 import type { Comment, Recording } from '@/lib/types';
-import { STYLE_NAMES, dayAndTime } from '../screens/Home';
+import { dayAndTime } from '../screens/Home';
 import { useRouter, type ScreenName } from '../router';
 import { ControlRow, FullscreenOverlay } from './PlayerFullscreen';
 
@@ -229,7 +229,6 @@ export function ReviewShell({ tab, window: own = false, children }: { tab: Revie
     playing, onToggle: toggle, time: timeLabel(now, rec.duration), chapter: chapterTitle,
     speed, onSpeed: () => setSpeed((r) => nextSpeed(r)), muted, onVolume: () => setMuted((m) => !m),
   };
-  const style = rec.summary?.style;
   const timelineLabel = tab === 'ReviewComments' ? 'Timeline with comments' : 'Timeline';
 
   const player = (
@@ -268,6 +267,14 @@ export function ReviewShell({ tab, window: own = false, children }: { tab: Revie
           <span style={{ fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{rec.title}</span>
           <span style={{ fontSize: 12, color: '#6E7079' }}>{dayAndTime(rec.createdAt)} · {formatLength(rec.duration)}</span>
         </span>
+        <button type="button" aria-label="Trim" title="Trim" onClick={() => go('Trim')}
+          style={{ width: 40, height: 40, borderRadius: 10, background: '#FFFFFF', border: '1px solid #E8E8EB', boxSizing: 'border-box', color: '#111114', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" strokeWidth="2" {...stroke}><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12" /></svg>
+        </button>
+        <button type="button" aria-label="Save" title="Save" onClick={() => go('Export')}
+          style={{ width: 40, height: 40, border: 'none', borderRadius: 10, background: '#111114', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: 'pointer' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" strokeWidth="2" {...stroke}><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+        </button>
       </div>
 
       <div style={{ margin: '8px 16px 0', borderRadius: 14, background: '#111114', overflow: 'hidden', flexShrink: 0 }}>
@@ -277,25 +284,6 @@ export function ReviewShell({ tab, window: own = false, children }: { tab: Revie
           <ControlRow {...controls} onFullScreen={enterFull} />
         </div>
       </div>
-
-      {(tab === 'Review' || tab === 'ReviewAsk') && (
-        <div style={{ margin: '12px 16px 0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {style && (
-            <button type="button" onClick={() => go('NoteStyle')}
-              style={{ height: 36, padding: '0 12px', border: 'none', borderRadius: 999, background: '#FFF1EA', color: '#9A3412', font: 'inherit', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              {STYLE_NAMES[style]}
-              <svg width="12" height="12" viewBox="0 0 24 24" strokeWidth="2.4" {...stroke}><path d="M6 9l6 6 6-6" /></svg>
-            </button>
-          )}
-          <span style={{ flexGrow: 1 }} />
-          <button type="button" onClick={() => go('Trim')}
-            style={{ height: 36, padding: '0 12px', borderRadius: 10, background: '#FFFFFF', border: '1px solid #E8E8EB', color: '#111114', font: 'inherit', fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" strokeWidth="2" {...stroke}><circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4L8.1 15.9M14.5 14.5L20 20M8.1 8.1L12 12" /></svg>Trim
-          </button>
-          <button type="button" onClick={() => go('Export')}
-            style={{ height: 36, padding: '0 14px', border: 'none', borderRadius: 10, background: '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Save</button>
-        </div>
-      )}
 
       <div role="tablist" aria-label="Recording views" style={{ margin: '14px 16px 0', display: 'flex', gap: 20, borderBottom: '1px solid #E8E8EB', flexShrink: 0 }}>
         <button type="button" role="tab" aria-selected={tab === 'Review'} onClick={() => tabTo('Review')} style={tabStyle(tab === 'Review')}>Notes</button>
