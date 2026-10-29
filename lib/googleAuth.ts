@@ -2,7 +2,7 @@
 
 // Public OAuth client id (O2), set at build time; empty until the owner creates the client.
 // Klipkord's Google OAuth client (Web application, redirect https://iapgbifdchhmidblniddncnagghloepi.chromiumapp.org/). It is public.
-const KLIPKORD_CLIENT_ID = '503949808619-n8mcagtmqju38elphh5i9sjm3jpan37h.apps.googleusercontent.com';
+const KLIPKORD_CLIENT_ID = '503949808619-egjguop1pgr0imp7pj7ej19g1b8afifo.apps.googleusercontent.com';
 export const GOOGLE_CLIENT_ID: string = (import.meta.env.WXT_GOOGLE_CLIENT_ID as string | undefined) || KLIPKORD_CLIENT_ID;
 export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 export const GOOGLE_ORIGINS = ['https://www.googleapis.com/*'];
