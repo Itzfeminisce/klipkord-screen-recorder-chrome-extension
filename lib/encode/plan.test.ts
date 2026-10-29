@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { audioSlices, editedMicros, encodePlan, opensPart, targetBitrate } from './plan';
+import { AUDIO_CODECS, VIDEO_CODECS, audioSlices, editedMicros, encodePlan, needsEncode, opensPart, targetBitrate } from './plan';
 
 const D = 10000;
 const plan = encodePlan([{ start: 1000, end: 3000 }, { start: 5000, end: D }], D);
@@ -55,5 +55,21 @@ describe('targetBitrate', () => {
     expect(targetBitrate(3_750_000, 10_000)).toBe(3e6);
     expect(targetBitrate(100, 10_000)).toBe(1e6);
     expect(targetBitrate(1e9, 1000)).toBe(16e6);
+  });
+});
+
+describe('output codecs and needsEncode', () => {
+  it('writes WebM as VP9 or VP8 with Opus, and MP4 as AVC first with AAC or Opus', () => {
+    expect(VIDEO_CODECS.webm.map((c) => c.mux)).toEqual(['V_VP9', 'V_VP8']);
+    expect(AUDIO_CODECS.webm.map((c) => c.mux)).toEqual(['A_OPUS']);
+    expect(VIDEO_CODECS.mp4[0]).toEqual({ codec: 'avc1.640034', mux: 'avc' });
+    expect(AUDIO_CODECS.mp4.map((c) => c.mux)).toEqual(['aac', 'opus']);
+  });
+  it('copies the file only for the same format with no cuts', () => {
+    expect(needsEncode(false, 'mp4', 'mp4')).toBe(false);
+    expect(needsEncode(false, 'webm', 'webm')).toBe(false);
+    expect(needsEncode(true, 'mp4', 'mp4')).toBe(true);
+    expect(needsEncode(false, 'mp4', 'webm')).toBe(true);
+    expect(needsEncode(false, 'webm', 'mp4')).toBe(true);
   });
 });

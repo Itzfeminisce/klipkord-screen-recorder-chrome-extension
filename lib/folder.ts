@@ -44,11 +44,12 @@ export function safeName(title: string): string {
 export type VideoExt = 'mp4' | 'webm';
 export const videoExt = (mime: string): VideoExt => (mime.includes('webm') ? 'webm' : 'mp4');
 
-export interface Choice { video: boolean; notes: boolean; captions: boolean; captionFormat: 'srt' | 'vtt' }
+/** `videoFormat` left out means the recording's own format. */
+export interface Choice { video: boolean; videoFormat?: VideoExt; notes: boolean; captions: boolean; captionFormat: 'srt' | 'vtt' }
 
 /** The file names the Export preview lists, in save order. */
 export function fileNames(rec: Pick<Recording, 'mime'>, c: Choice): string[] {
-  return [c.video && `video.${videoExt(rec.mime)}`, c.notes && 'notes.md', c.captions && `captions.${c.captionFormat}`].filter((x): x is string => !!x);
+  return [c.video && `video.${c.videoFormat ?? videoExt(rec.mime)}`, c.notes && 'notes.md', c.captions && `captions.${c.captionFormat}`].filter((x): x is string => !!x);
 }
 
 /** `Title`, or `Title (2)` when that folder already exists. */

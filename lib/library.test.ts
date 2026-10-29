@@ -81,6 +81,10 @@ describe('file names', () => {
     expect(fileNames(rec(), { video: true, notes: true, captions: true, captionFormat: 'srt' })).toEqual(['video.mp4', 'notes.md', 'captions.srt']);
     expect(fileNames(rec({ mime: 'video/webm' }), { video: true, notes: false, captions: true, captionFormat: 'vtt' })).toEqual(['video.webm', 'captions.vtt']);
   });
+  it('names the video after the chosen format', () => {
+    expect(fileNames(rec(), { video: true, videoFormat: 'webm', notes: false, captions: false, captionFormat: 'srt' })).toEqual(['video.webm']);
+    expect(fileNames(rec({ mime: 'video/webm' }), { video: true, videoFormat: 'mp4', notes: false, captions: false, captionFormat: 'srt' })).toEqual(['video.mp4']);
+  });
   it('makes a safe folder name', () => {
     expect(safeName('Checkout: freezes/on <Safari>?')).toBe('Checkout freezes on Safari');
     expect(safeName('  ...  ')).toBe('Klipkord recording');

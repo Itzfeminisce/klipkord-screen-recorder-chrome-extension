@@ -1,5 +1,6 @@
 import { keptRanges } from '../editList';
 import type { KeptRange } from '../types';
+import type { Container } from './demux';
 
 /**
  * The kept parts for encoding, in ms. A part that runs to the recorded length runs to the end of the media,
@@ -58,3 +59,19 @@ export function targetBitrate(bytes: number, durationMs: number): number {
 
 /** A key frame at least this often, so the copy seeks well. */
 export const KEY_FRAME_EVERY_US = 2_000_000;
+
+/** Encoder codecs to try for each output container, best first, with the muxer's name for each. */
+export const VIDEO_CODECS: Record<Container, { codec: string; mux: string }[]> = {
+  mp4: [
+    { codec: 'avc1.640034', mux: 'avc' }, { codec: 'avc1.4d0034', mux: 'avc' }, { codec: 'avc1.42e034', mux: 'avc' },
+    { codec: 'avc1.640028', mux: 'avc' }, { codec: 'avc1.42e01f', mux: 'avc' }, { codec: 'vp09.00.40.08', mux: 'vp9' },
+  ],
+  webm: [{ codec: 'vp09.00.40.08', mux: 'V_VP9' }, { codec: 'vp8', mux: 'V_VP8' }],
+};
+export const AUDIO_CODECS: Record<Container, { codec: string; mux: string }[]> = {
+  mp4: [{ codec: 'mp4a.40.2', mux: 'aac' }, { codec: 'opus', mux: 'opus' }],
+  webm: [{ codec: 'opus', mux: 'A_OPUS' }],
+};
+
+/** Saving goes through the encoder for cuts or another container; otherwise the stored file is copied. */
+export const needsEncode = (cut: boolean, from: Container, to: Container): boolean => cut || from !== to;

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { getFolderHandle, getRecording, putFolderHandle, updateRecording } from '@/lib/db';
 import { buildCaptions } from '@/lib/captions';
 import { editedLength } from '@/lib/editList';
-import { encodeKept } from '@/lib/encode';
+import { encodeKept, needsEncode } from '@/lib/encode';
 import { ensureAccess, fileNames, pickFolder, saveFiles, videoExt, type Choice, type Planned } from '@/lib/folder';
 import { estimateVideoBytes } from '@/lib/library';
 import { buildMarkdown } from '@/lib/markdown';
@@ -98,9 +98,11 @@ export default function Export() {
   if (!rec) return <main className="screen screen-center"><BackBar label="Back" onBack={back} /></main>;
   const r = rec;
 
-  const ext = videoExt(r.mime);
+  const own = videoExt(r.mime);
+  const ext = choice.videoFormat ?? own;
   const length = r.duration > 0 ? editedLength(r.edits, r.duration) : 0;
   const cut = r.edits.length > 0;
+  const encode = needsEncode(cut, own, ext);
   const hasCaptions = r.transcript.length > 0;
   const names = fileNames(r, { ...choice, captions: choice.captions && hasCaptions });
   const nothing = names.length === 0;
@@ -144,7 +146,7 @@ export default function Export() {
         plan.push({
           name: `video.${ext}`,
           data: async () => {
-            const blob = cut ? await encodeKept(r, setShare, abort.signal) : await videoStore.read(r.id, 'video', r.mime);
+            const blob = encode ? await encodeKept(r, setShare, abort.signal, ext) : await videoStore.read(r.id, 'video', r.mime);
             if (blob.size === 0) throw new Error('The recording has no video');
             return blob;
           },
@@ -199,7 +201,7 @@ export default function Export() {
       <div style={{ ...CARD, margin: '10px 16px 0', display: 'flex', flexDirection: 'column' }}>
         <Row name="Video" checked={choice.video} onCheck={(v) => set({ video: v })}
           sub={`${cut ? `${formatClock(length)} with your cuts` : formatClock(length)} · about ${formatBytes(estimateVideoBytes(r))}`}>
-          <Segmented label="Video format" value={ext === 'webm' ? 'WebM' : 'MP4'} options={['MP4', 'WebM']} disabled={[ext === 'webm' ? 'MP4' : 'WebM']} onChange={() => undefined} />
+          <Segmented label="Video format" value={ext === 'webm' ? 'WebM' : 'MP4'} options={['MP4', 'WebM']} onChange={(v) => set({ videoFormat: v === 'WebM' ? 'webm' : 'mp4' })} />
         </Row>
         {DIVIDER}
         <Row name="Notes" sub="Summary, steps, chapters and transcript in Markdown" checked={choice.notes} onCheck={(v) => set({ notes: v })} />
@@ -218,7 +220,7 @@ export default function Export() {
           style={{ height: 48, border: 'none', borderRadius: 12, background: '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, opacity: nothing ? 0.5 : 1, cursor: busy ? 'default' : 'pointer' }}>
           {busy ? <Spinner /> : 'Save to folder'}
         </button>
-        {busy && choice.video && cut && (
+        {busy && choice.video && encode && (
           <span role="progressbar" aria-valuenow={Math.round(share * 100)} aria-valuemin={0} aria-valuemax={100} style={{ height: 6, borderRadius: 999, background: '#F1F1F3', overflow: 'hidden' }}>
             <span style={{ display: 'block', width: `${Math.round(share * 100)}%`, height: '100%', background: '#C2410C' }} />
           </span>
