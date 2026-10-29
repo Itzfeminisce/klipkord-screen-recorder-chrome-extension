@@ -61,3 +61,9 @@ export async function connectGoogle(): Promise<string> {
 }
 
 export const forgetGoogleToken = (): Promise<void> => browser.storage.session.remove(TOKEN_KEY);
+
+/** True when Google itself failed, false when the window was closed or access was refused. */
+export function signInError(error: unknown): boolean {
+  const m = String((error as { message?: string } | null)?.message ?? error).toLowerCase();
+  return !/access_denied|did not approve|closed|was not allowed|cancel/.test(m);
+}

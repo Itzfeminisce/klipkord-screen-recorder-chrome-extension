@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DRIVE_SCOPE, authUrl, googleConfigured, parseTokenRedirect, tokenUsable } from './googleAuth';
+import { DRIVE_SCOPE, authUrl, googleConfigured, parseTokenRedirect, signInError, tokenUsable } from './googleAuth';
 
 const REDIRECT = 'https://fakeextensionid.chromiumapp.org/';
 
@@ -33,5 +33,13 @@ describe('Google sign-in', () => {
   it('is not set up without a client id', () => {
     expect(googleConfigured('')).toBe(false);
     expect(googleConfigured('fake-client.apps.googleusercontent.com')).toBe(true);
+  });
+});
+
+describe('signInError', () => {
+  it('tells a closed or refused window from a Google failure', () => {
+    expect(signInError(new Error('The user did not approve access.'))).toBe(false);
+    expect(signInError(new Error('Google sign-in failed: access_denied'))).toBe(false);
+    expect(signInError(new Error('Authorization page could not be loaded.'))).toBe(true);
   });
 });

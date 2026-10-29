@@ -3,7 +3,7 @@ import { getRecording } from '@/lib/db';
 import { DriveError, cancelUpload, deleteFile, driveState, getShare, putShare, removeShare, shareAnyone, startUpload, stopSharing, uploadChunks, type Fetch, type Share } from '@/lib/drive';
 import { encodeKept } from '@/lib/encode';
 import { safeName, videoExt } from '@/lib/folder';
-import { GOOGLE_ORIGINS, connectGoogle, forgetGoogleToken, getGoogleToken, googleConfigured } from '@/lib/googleAuth';
+import { GOOGLE_ORIGINS, connectGoogle, forgetGoogleToken, getGoogleToken, googleConfigured, signInError } from '@/lib/googleAuth';
 import { estimateVideoBytes } from '@/lib/library';
 import { formatBytes } from '@/lib/time';
 import type { Recording } from '@/lib/types';
@@ -29,6 +29,7 @@ type Phase =
   | { kind: 'drive-uploading'; sent: number; total: number }
   | { kind: 'drive-upload-failed'; percent: number }
   | { kind: 'drive-offline' }
+  | { kind: 'drive-connect-failed'; googleError: boolean }
   | { kind: 'ready'; share: Share };
 
 function StateCard({ tint, icon, title, body, children }: { tint: CSSProperties; icon: ReactNode; title: string; body: string; children: ReactNode }) {
@@ -150,7 +151,7 @@ export default function DriveLink() {
       await begin(token);
     } catch (error) {
       console.error('Klipkord: could not connect Google', error);
-      if (!navigator.onLine) setPhase({ kind: 'drive-offline' });
+      setPhase(navigator.onLine ? { kind: 'drive-connect-failed', googleError: signInError(error) } : { kind: 'drive-offline' });
     } finally {
       setBusy(false);
     }
@@ -211,9 +212,16 @@ export default function DriveLink() {
           body="Klipkord asks for the smallest permission Google has. It can only see files that Klipkord itself puts in your Drive. It cannot open, list or change anything else you have there.">
           <div style={{ padding: '10px 12px', borderRadius: 12, background: '#EBEBEE', fontSize: 12, lineHeight: 1.5, color: '#44464D' }}>Nothing is uploaded until you press Share. You can disconnect in Settings at any time.</div>
           {/* Without a client id in the build there is nothing to connect to. */}
-          <button type="button" onClick={() => void connect()} disabled={!configured || busy} style={{ ...SMALL_DARK, display: 'flex', alignItems: 'center', gap: 8, opacity: configured ? 1 : 0.5, cursor: configured && !busy ? 'pointer' : 'default' }}>
-            {busy && <Spinner label="Connecting" size={14} />}Connect Google
-          </button>
+          {busy ? (
+            <>
+              <button type="button" disabled style={{ ...SMALL_DARK, background: '#44464D', display: 'flex', alignItems: 'center', gap: 8, cursor: 'default' }}>
+                <span aria-hidden="true" className="spinner" style={{ width: 14, height: 14, boxSizing: 'border-box', borderColor: 'rgba(255,255,255,0.35)', borderTopColor: '#FFFFFF' }} />Waiting for Google…
+              </button>
+              <span style={{ fontSize: 12, lineHeight: 1.45, color: '#6E7079' }}>Finish signing in in the Google window.</span>
+            </>
+          ) : (
+            <button type="button" onClick={() => void connect()} disabled={!configured} style={{ ...SMALL_DARK, opacity: configured ? 1 : 0.5, cursor: configured ? 'pointer' : 'default' }}>Connect Google</button>
+          )}
         </StateCard>
       )}
 
@@ -235,6 +243,16 @@ export default function DriveLink() {
           body={`Google stopped it at ${phase.percent}%. Nothing was shared, and no link was made. Your recording is safe on this computer.`}>
           <div style={{ display: 'flex', gap: 8 }}>
             <button type="button" onClick={() => void begin()} style={SMALL_DARK}>Try again</button>
+            {backLink('Back to saving')}
+          </div>
+        </StateCard>
+      )}
+
+      {phase.kind === 'drive-connect-failed' && (
+        <StateCard tint={{ background: '#FEF2F2', color: '#B91C1C' }} icon={<><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16.5v.5" /></>} title="Google sign-in didn’t finish"
+          body={phase.googleError ? 'Google couldn’t connect right now. Try again in a minute.' : 'The Google window was closed or access wasn’t allowed, so nothing was connected. Nothing was uploaded.'}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => void connect()} style={SMALL_DARK}>Try again</button>
             {backLink('Back to saving')}
           </div>
         </StateCard>
@@ -269,9 +287,10 @@ function Ready({ share, busy, copied, onCopy, onStop, onDelete }: { share: Share
         <label htmlFor="share-link" style={{ fontSize: 12, color: '#6E7079' }}>View link</label>
         <input id="share-link" type="text" readOnly value={share.link} onFocus={(e) => e.currentTarget.select()}
           style={{ height: 44, boxSizing: 'border-box', padding: '0 12px', border: '1px solid #E8E8EB', borderRadius: 10, background: '#F6F6F7', fontFamily: MONO, fontSize: 12, color: '#111114' }} />
-        <button type="button" onClick={() => onCopy(share.link)} style={{ height: 48, border: 'none', borderRadius: 12, background: '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
-          {copied && <svg width="16" height="16" viewBox="0 0 24 24" {...stroke} aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>}Copy link
+        <button type="button" onClick={() => onCopy(share.link)} style={{ height: 48, border: 'none', borderRadius: 12, background: copied ? '#15803D' : '#111114', color: '#FFFFFF', font: 'inherit', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer' }}>
+          {copied ? <><svg width="14" height="14" viewBox="0 0 24 24" {...stroke} strokeWidth={2.5} aria-hidden="true"><path d="M5 12l5 5L19 7" /></svg>Copied</> : 'Copy link'}
         </button>
+        {copied && <span role="status" style={{ fontSize: 12, color: '#15803D' }}>Link copied. Paste it anywhere.</span>}
       </div>
 
       <div style={{ ...CARD, margin: '10px 16px 0', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
