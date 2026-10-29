@@ -18,6 +18,7 @@ export type ScreenName =
   | 'Review'
   | 'ReviewTranscript'
   | 'ReviewComments'
+  | 'ReviewAsk'
   | 'NoteStyle'
   | 'Trim'
   | 'Export'

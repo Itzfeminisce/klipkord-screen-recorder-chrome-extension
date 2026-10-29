@@ -11,7 +11,7 @@ import type { Comment, Recording } from '@/lib/types';
 import { STYLE_NAMES, dayAndTime } from '../screens/Home';
 import { useRouter, type ScreenName } from '../router';
 
-export type ReviewTab = 'Review' | 'ReviewTranscript' | 'ReviewComments';
+export type ReviewTab = 'Review' | 'ReviewTranscript' | 'ReviewComments' | 'ReviewAsk';
 
 export interface ReviewContext {
   rec: Recording;
@@ -245,6 +245,7 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
         <button type="button" role="tab" aria-selected={tab === 'ReviewComments'} onClick={() => tabTo('ReviewComments')} style={tabStyle(tab === 'ReviewComments')}>
           {rec.comments.length > 0 ? `Comments · ${rec.comments.length}` : 'Comments'}
         </button>
+        <button type="button" role="tab" aria-selected={tab === 'ReviewAsk'} onClick={() => tabTo('ReviewAsk')} style={tabStyle(tab === 'ReviewAsk')}>Ask</button>
       </div>
 
       {children({ rec, now, seek, setComments })}

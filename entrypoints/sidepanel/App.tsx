@@ -20,6 +20,7 @@ import Overlay from './screens/Overlay';
 import Review from './screens/Review';
 import ReviewTranscript from './screens/ReviewTranscript';
 import ReviewComments from './screens/ReviewComments';
+import ReviewAsk from './screens/ReviewAsk';
 import NoteStyle from './screens/NoteStyle';
 import Trim from './screens/Trim';
 import Export from './screens/Export';
@@ -52,6 +53,7 @@ export const SCREENS: Record<ScreenName, ComponentType> = {
   Review,
   ReviewTranscript,
   ReviewComments,
+  ReviewAsk,
   NoteStyle,
   Trim,
   Export,
