@@ -1,10 +1,24 @@
-import type { MarkerKind } from './types';
+import type { CaptureMode, MarkerKind, Quality } from './types';
+import type { RecorderState } from './recorder';
 
 /** Runtime messages. Keyboard commands arrive as these; T3 and T5 act on them. */
 export type Message =
   | { type: 'recording/toggle' }
   | { type: 'recording/pause' }
-  | { type: 'marker/add'; kind: MarkerKind };
+  | { type: 'marker/add'; kind: MarkerKind }
+  // Side panel and background → offscreen recorder (T3).
+  | { type: 'recorder/prepare'; streamId: string; mode: CaptureMode; mic: boolean; sound: boolean; quality: Quality; maxWidth: number; maxHeight: number }
+  | { type: 'recorder/begin' }
+  | { type: 'recorder/pause' }
+  | { type: 'recorder/resume' }
+  | { type: 'recorder/stop' }
+  | { type: 'recorder/cancel' }
+  | { type: 'recorder/restart' }
+  | { type: 'recorder/discard' }
+  | { type: 'recorder/mute'; muted: boolean }
+  // Offscreen recorder → background (badge, session state).
+  | { type: 'recorder/state'; state: RecorderState }
+  | { type: 'recorder/tick'; elapsed: number };
 
 export type MessageType = Message['type'];
 export type MessageOf<T extends MessageType> = Extract<Message, { type: T }>;

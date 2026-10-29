@@ -1,0 +1,310 @@
+import { cleanupStack, guard } from '@/lib/check/guard';
+import { deleteRecording, getRecording, putRecording } from '@/lib/db';
+import { onMessage, send, type MessageOf } from '@/lib/messages';
+import { createMix, createSilenceWatch, type Mix } from '@/lib/mix';
+import {
+  IDLE, VIDEO_BITRATE, chooseMime, chooseVoiceMime, clockElapsed, clockPause, clockResume, clockStart, containerOf,
+  createChunkWriter, type EndReason, type RecorderState,
+} from '@/lib/recorder';
+import type { RecorderReply } from '@/lib/capture';
+import { freeBytes, shouldAutoStop } from '@/lib/storageMath';
+import { videoStore } from '@/lib/videoStore';
+
+// The offscreen document owns every stream and recorder, so recording goes on with the side panel closed.
+
+let state: RecorderState = IDLE;
+
+function setState(patch: Partial<RecorderState>) {
+  state = { ...state, ...patch };
+  void send({ type: 'recorder/state', state });
+}
+
+const stopTracks = (stream: MediaStream | null | undefined) => stream?.getTracks().forEach((t) => t.stop());
+
+interface Streams {
+  video: MediaStream;
+  mic: MediaStream | null;
+  audio: MediaStreamTrack | null;   // what goes into the video's sound
+  mix: Mix;
+  cleanup: ReturnType<typeof cleanupStack>;
+}
+let streams: Streams | null = null;
+
+type Writer = ReturnType<typeof createChunkWriter>;
+interface Take {
+  id: string;
+  video: MediaRecorder;
+  voice: MediaRecorder | null;
+  videoWriter: Writer;
+  voiceWriter: Writer | null;
+  timers: ReturnType<typeof setInterval>[];
+  discard: boolean;
+}
+let take: Take | null = null;
+
+// One command at a time, so a shortcut and a click never interleave.
+let queue: Promise<unknown> = Promise.resolve();
+function run<T>(fn: () => Promise<T>): Promise<T> {
+  const next = queue.then(fn);
+  queue = next.catch(() => undefined);
+  return next;
+}
+
+const ok: RecorderReply = { ok: true };
+const fail = (error: string): RecorderReply => ({ ok: false, error });
+
+async function openScreen(msg: MessageOf<'recorder/prepare'>): Promise<MediaStream> {
+  const source = { chromeMediaSource: 'desktop', chromeMediaSourceId: msg.streamId };
+  const video = { mandatory: { ...source, maxWidth: msg.maxWidth, maxHeight: msg.maxHeight, maxFrameRate: 30 } } as MediaTrackConstraints;
+  const open = (audio: boolean) =>
+    guard(navigator.mediaDevices.getUserMedia({ audio: audio ? ({ mandatory: source } as MediaTrackConstraints) : false, video }), {
+      ms: 30_000,
+      what: 'Screen capture',
+      dispose: stopTracks,
+    });
+  if (!msg.sound) return open(false);
+  try {
+    return await open(true);
+  } catch (error) {
+    // A stream id is single-use only once it succeeds, so asking again without sound is safe.
+    console.error('Klipkord: could not capture sound with the screen', error);
+    return open(false);
+  }
+}
+
+async function openMic(): Promise<MediaStream | null> {
+  try {
+    return await guard(
+      navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
+      { ms: 15_000, what: 'Microphone', dispose: stopTracks },
+    );
+  } catch (error) {
+    console.error('Klipkord: could not open the microphone', error);
+    return null;
+  }
+}
+
+async function prepare(msg: MessageOf<'recorder/prepare'>): Promise<RecorderReply> {
+  await teardown();
+  const cleanup = cleanupStack();
+  try {
+    const video = await openScreen(msg);
+    cleanup.add(() => stopTracks(video));
+    const mic = msg.mic ? await openMic() : null;
+    cleanup.add(() => stopTracks(mic));
+    const sound = video.getAudioTracks().length ? video : null;
+
+    const ctx = new AudioContext();
+    await ctx.resume().catch(() => undefined);
+    const mix = createMix(ctx, mic, sound);
+    cleanup.add(() => void mix.close());
+    // Without a running AudioContext the mix is silent; keep the voice rather than nothing.
+    const direct = mic?.getAudioTracks()[0] ?? sound?.getAudioTracks()[0] ?? null;
+    const audio = ctx.state === 'running' ? mix.track : direct;
+    if (ctx.state !== 'running') console.error('Klipkord: could not start the sound mixer', ctx.state);
+    cleanup.add(() => mix.track?.stop());
+
+    const track = video.getVideoTracks()[0];
+    if (!track) throw new Error('No video track');
+    track.addEventListener('ended', () => void run(sharingEnded));
+    streams = { video, mic, audio, mix, cleanup };
+    setState({
+      ...IDLE,
+      status: 'armed', mode: msg.mode, quality: msg.quality,
+      mic: Boolean(mic), micBlocked: msg.mic && !mic, sound: Boolean(sound),
+    });
+    return ok;
+  } catch (error) {
+    cleanup.run((e) => console.error('Klipkord: could not release capture', e));
+    console.error('Klipkord: could not start capture', error);
+    setState(IDLE);
+    return fail(String(error));
+  }
+}
+
+function recorderStopped(recorder: MediaRecorder | null): Promise<void> {
+  if (!recorder || recorder.state === 'inactive') return Promise.resolve();
+  const stopped = new Promise<void>((resolve) => recorder.addEventListener('stop', () => resolve(), { once: true }));
+  recorder.stop();
+  // Waits for the last chunk, but never hangs if the recorder does not answer.
+  return guard(stopped, { ms: 5000, what: 'MediaRecorder stop' }).catch((error) => console.error('Klipkord: could not stop the recorder', error));
+}
+
+async function begin(): Promise<RecorderReply> {
+  if (!streams || state.status !== 'armed') return fail('not armed');
+  const id = crypto.randomUUID();
+  const quality = state.quality ?? '1080p';
+  const videoTrack = streams.video.getVideoTracks()[0];
+  if (!videoTrack) return fail('no video');
+  const tracks = streams.audio ? [videoTrack, streams.audio] : [videoTrack];
+  const mime = chooseMime((t) => MediaRecorder.isTypeSupported(t), Boolean(streams.audio));
+  const onError = (error: unknown) => console.error('Klipkord: could not save a video chunk', error);
+
+  await videoStore.open(id);
+  const video = new MediaRecorder(new MediaStream(tracks), { mimeType: mime, videoBitsPerSecond: VIDEO_BITRATE[quality] });
+  const videoWriter = createChunkWriter((c) => videoStore.append(id, 'video', c), onError);
+  const micTrack = streams.mic?.getAudioTracks()[0];
+  const voiceMime = chooseVoiceMime((t) => MediaRecorder.isTypeSupported(t));
+  const voice = micTrack ? new MediaRecorder(new MediaStream([micTrack]), { mimeType: voiceMime }) : null;
+  const voiceWriter = voice ? createChunkWriter((c) => videoStore.append(id, 'voice', c), onError) : null;
+  const t: Take = { id, video, voice, videoWriter, voiceWriter, timers: [], discard: false };
+  video.ondataavailable = (e) => !t.discard && videoWriter.write(e.data);
+  if (voice && voiceWriter) voice.ondataavailable = (e) => !t.discard && voiceWriter.write(e.data);
+
+  const now = Date.now();
+  await putRecording({
+    id, title: 'Untitled recording', createdAt: now, duration: 0, status: 'recording',
+    mode: state.mode ?? 'tab', quality, mime: containerOf(mime), bytes: 0,
+    markers: [], notes: [], comments: [], transcript: [], transcriptPending: false, edits: [],
+  });
+  video.start(1000);
+  voice?.start(1000);
+  take = t;
+  setState({ status: 'recording', recordingId: id, clock: clockStart(now), silentMic: false, disk: undefined, endedBy: undefined });
+
+  const silence = createSilenceWatch();
+  t.timers.push(
+    setInterval(() => {
+      if (state.status !== 'recording') return;
+      const now = Date.now();
+      void send({ type: 'recorder/tick', elapsed: clockElapsed(state.clock, now) });
+      if (!streams?.mic) return;
+      const silent = silence(streams.mix.micLevel(), now, state.muted);
+      if (silent !== state.silentMic) setState({ silentMic: silent });
+    }, 1000),
+    setInterval(() => void persist(t), 5000),
+    setInterval(() => void checkDisk(t), 10_000),
+  );
+  void checkDisk(t);
+  return ok;
+}
+
+const takeBytes = (t: Take) => t.videoWriter.bytes + (t.voiceWriter?.bytes ?? 0);
+
+// Keeps duration and size current so a crash leaves a recording Recovered can offer back.
+async function persist(t: Take, patch: Partial<Parameters<typeof putRecording>[0]> = {}) {
+  try {
+    const rec = await getRecording(t.id);
+    if (!rec) return;
+    await putRecording({ ...rec, duration: clockElapsed(state.clock, Date.now()), bytes: takeBytes(t), ...patch });
+  } catch (error) {
+    console.error('Klipkord: could not update the recording', error);
+  }
+}
+
+async function checkDisk(t: Take) {
+  try {
+    const free = freeBytes(await videoStore.usage());
+    const seconds = clockElapsed(state.clock, Date.now()) / 1000;
+    const bytesPerSecond = seconds > 2 ? takeBytes(t) / seconds : 0;
+    setState({ disk: { free, bytesPerSecond } });
+    if (shouldAutoStop(free) && take === t) void run(() => finish('disk-full'));
+  } catch (error) {
+    console.error('Klipkord: could not check free space', error);
+  }
+}
+
+async function pauseTake(): Promise<RecorderReply> {
+  if (!take || state.status !== 'recording') return fail('not recording');
+  if (take.video.state === 'recording') take.video.pause();
+  if (take.voice?.state === 'recording') take.voice.pause();
+  setState({ status: 'paused', clock: clockPause(state.clock, Date.now()), silentMic: false });
+  await persist(take, { status: 'paused' });
+  return ok;
+}
+
+async function resumeTake(): Promise<RecorderReply> {
+  if (!take || state.status !== 'paused') return fail('not paused');
+  if (take.video.state === 'paused') take.video.resume();
+  if (take.voice?.state === 'paused') take.voice.resume();
+  setState({ status: 'recording', clock: clockResume(state.clock, Date.now()) });
+  await persist(take, { status: 'recording' });
+  return ok;
+}
+
+async function finish(endedBy: EndReason): Promise<RecorderReply> {
+  const t = take;
+  if (!t || (state.status !== 'recording' && state.status !== 'paused')) return fail('not recording');
+  const clock = clockPause(state.clock, Date.now());
+  setState({ status: 'saving', clock });
+  t.timers.forEach(clearInterval);
+  await Promise.all([recorderStopped(t.video), recorderStopped(t.voice)]);
+  await Promise.all([t.videoWriter.flush(), t.voiceWriter?.flush()]);
+  take = null;
+  await persist(t, { status: 'processing', duration: clockElapsed(clock, Date.now()) });
+  await teardown();
+  setState({ status: 'done', recordingId: t.id, endedBy, silentMic: false });
+  return ok;
+}
+
+/** Stops the take without keeping anything: its chunks, files and record are removed. */
+async function dropTake() {
+  const t = take;
+  if (!t) return;
+  t.discard = true;
+  t.timers.forEach(clearInterval);
+  take = null;
+  await Promise.all([recorderStopped(t.video), recorderStopped(t.voice)]);
+  await Promise.all([t.videoWriter.flush(), t.voiceWriter?.flush()]);
+  await videoStore.remove(t.id).catch((error) => console.error('Klipkord: could not delete the video', error));
+  await deleteRecording(t.id).catch((error) => console.error('Klipkord: could not delete the recording', error));
+}
+
+async function restart(): Promise<RecorderReply> {
+  await dropTake();
+  const live = streams?.video.getVideoTracks()[0]?.readyState === 'live';
+  if (!live) {
+    await teardown();
+    setState(IDLE);
+    return fail('sharing stopped');
+  }
+  setState({ status: 'armed', recordingId: undefined, clock: IDLE.clock, silentMic: false, disk: undefined, muted: false });
+  streams?.mic?.getAudioTracks().forEach((t) => (t.enabled = true));
+  return ok;
+}
+
+async function discard(): Promise<RecorderReply> {
+  await dropTake();
+  await teardown();
+  setState(IDLE);
+  return ok;
+}
+
+async function sharingEnded(): Promise<RecorderReply> {
+  if (state.status === 'recording' || state.status === 'paused') return finish('sharing-stopped');
+  if (state.status === 'armed') return discard();
+  return ok;
+}
+
+async function mute(muted: boolean): Promise<RecorderReply> {
+  streams?.mic?.getAudioTracks().forEach((t) => (t.enabled = !muted));
+  setState({ muted, silentMic: false });
+  return ok;
+}
+
+/** Stops every track (camera and mic lights off) and closes the mixer. */
+async function teardown() {
+  const s = streams;
+  streams = null;
+  s?.cleanup.run((error) => console.error('Klipkord: could not release capture', error));
+}
+
+onMessage((msg) => {
+  switch (msg.type) {
+    case 'recorder/prepare': return run(() => prepare(msg));
+    case 'recorder/begin': return run(begin);
+    case 'recorder/pause': return run(pauseTake);
+    case 'recorder/resume': return run(resumeTake);
+    case 'recorder/stop': return run(() => finish('user'));
+    case 'recorder/cancel': return run(discard);
+    case 'recorder/restart': return run(restart);
+    case 'recorder/discard': return run(discard);
+    case 'recorder/mute': return run(() => mute(msg.muted));
+    default: return undefined;
+  }
+});
+
+addEventListener('pagehide', () => {
+  take?.timers.forEach(clearInterval);
+  void teardown();
+});
