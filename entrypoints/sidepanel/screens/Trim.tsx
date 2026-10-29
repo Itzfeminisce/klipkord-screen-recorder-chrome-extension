@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { PROBE_SEEK_SECONDS, formatLength, needsDurationProbe, percentOf, timeAtPoint } from '@/lib/comments';
-import { getRecording, putRecording } from '@/lib/db';
+import { getRecording, updateRecording } from '@/lib/db';
 import { cut, describe, editedLength, keptRanges, playable, restore, setEnd, setStart, type Edit } from '@/lib/editList';
 import { formatClock } from '@/lib/time';
 import type { KeptRange, Recording } from '@/lib/types';
@@ -170,9 +170,7 @@ export default function Trim() {
     if (!id || saving) return;
     setSaving(true);
     try {
-      // Read again so comments or notes written meanwhile are kept.
-      const latest = await getRecording(id);
-      if (latest) await putRecording({ ...latest, edits });
+      await updateRecording(id, { edits });
       leave();
     } catch (error) {
       console.error('Klipkord: could not save the edits', error);

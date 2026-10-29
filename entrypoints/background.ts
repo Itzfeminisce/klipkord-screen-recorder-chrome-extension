@@ -99,11 +99,10 @@ export default defineBackground(() => {
     return undefined;
   });
 
-  // The offscreen document stays open while it still transcribes a finished recording.
+  // The offscreen document stays open while it holds a stream, runs a command or still transcribes.
   async function closeOffscreenWhenIdle() {
     if (current.status !== 'idle' && current.status !== 'done') return;
-    const transcript = await send<{ busy?: boolean }>({ type: 'transcript/get' });
-    if (transcript?.busy) return;
+    if ((await send<boolean>({ type: 'offscreen/busy' })) !== false) return;
     await chrome.offscreen.closeDocument().catch(() => undefined);
   }
 

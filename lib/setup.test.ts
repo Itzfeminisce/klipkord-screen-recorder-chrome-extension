@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   builtinAiPresent, canStart, classifyPaste, cloudSettings, detectMachine, isFirstRun, missingKeys, notesOptions,
   penvRowStatus, requestAccess, setupChoice, transcriptsStatus,
@@ -30,10 +30,11 @@ describe('detectMachine', () => {
   it('reads WebGPU and built-in AI availability', async () => {
     const env = {
       gpu: { requestAdapter: async () => ({}) },
-      summarizer: { availability: async () => 'downloadable' },
+      summarizer: { availability: vi.fn(async (_options?: { outputLanguage?: string }) => 'downloadable') },
       languageModel: { availability: async () => 'unavailable' },
     };
     expect(await detectMachine(env)).toEqual({ webgpu: true, builtinAi: true });
+    expect(env.summarizer.availability).toHaveBeenCalledWith({ outputLanguage: 'en' });
   });
 
   it('counts absent APIs, a null adapter and throwing probes as missing', async () => {

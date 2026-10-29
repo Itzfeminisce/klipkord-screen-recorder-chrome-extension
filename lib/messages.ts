@@ -26,8 +26,9 @@ export type Message =
   | { type: 'transcript/config' }                       // offscreen → background: ai, language and Groq key
   | { type: 'transcript/status'; status: TranscriptStatus }
   | { type: 'transcript/get' }                          // → offscreen: the current TranscriptStatus
+  | { type: 'offscreen/busy' }                         // → offscreen: true while a stream, a take, a command or a transcript is live
   | { type: 'transcript/use-groq' }                     // "Use Groq for this one"
-  | { type: 'transcript/idle' };                        // offscreen → background: nothing left to transcribe
+  | { type: 'transcript/idle' };                        // offscreen → background: nothing left to transcribe or record
 
 export type MessageType = Message['type'];
 export type MessageOf<T extends MessageType> = Extract<Message, { type: T }>;

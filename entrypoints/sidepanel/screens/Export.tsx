@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { getFolderHandle, getRecording, putFolderHandle, putRecording } from '@/lib/db';
+import { getFolderHandle, getRecording, putFolderHandle, updateRecording } from '@/lib/db';
 import { buildCaptions } from '@/lib/captions';
 import { editedLength } from '@/lib/editList';
 import { encodeKept } from '@/lib/encode';
@@ -160,7 +160,7 @@ export default function Export() {
       if (choice.notes) plan.push({ name: 'notes.md', data: async () => buildMarkdown(r) });
       if (choice.captions && hasCaptions) plan.push({ name: `captions.${choice.captionFormat}`, data: async () => buildCaptions(r.transcript, r.edits, r.duration, choice.captionFormat) });
       const { dir: sub, saved } = await saveFiles(dir, r.title, plan);
-      await putRecording({ ...r, savedTo: { folder: dir.name, at: Date.now(), files: saved.map((f) => `${sub}/${f.name}`) } });
+      await updateRecording(r.id, { savedTo: { folder: dir.name, at: Date.now(), files: saved.map((f) => `${sub}/${f.name}`) } });
       navigate('Saved', { recordingId: r.id });
     } catch (error) {
       if ((error as { name?: string }).name === 'AbortError') return;

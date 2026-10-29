@@ -52,7 +52,7 @@ export function builtinAiPresent(summarizer: unknown, languageModel: unknown): b
 
 export interface MachineEnv {
   gpu?: { requestAdapter(): Promise<unknown> };
-  summarizer?: { availability?: () => Promise<unknown> };
+  summarizer?: { availability?: (options?: { outputLanguage?: string }) => Promise<unknown> };
   languageModel?: { availability?: () => Promise<unknown> };
 }
 
@@ -62,6 +62,9 @@ export function browserEnv(): MachineEnv {
   return { gpu: (navigator as unknown as MachineEnv).gpu, summarizer: g.Summarizer, languageModel: g.LanguageModel };
 }
 
+// Without an output language Chrome warns on every probe.
+const SUMMARIZER_OPTIONS = { outputLanguage: 'en' };
+
 /** Asks for a WebGPU adapter and the built-in AI availability. A failing probe counts as missing. */
 export async function detectMachine(env: MachineEnv = browserEnv()): Promise<MachineCheck> {
   const probe = async (run?: () => Promise<unknown>): Promise<unknown> => {
@@ -69,7 +72,7 @@ export async function detectMachine(env: MachineEnv = browserEnv()): Promise<Mac
   };
   const [adapter, summarizer, languageModel] = await Promise.all([
     probe(env.gpu ? () => env.gpu!.requestAdapter() : undefined),
-    probe(env.summarizer?.availability ? () => env.summarizer!.availability!() : undefined),
+    probe(env.summarizer?.availability ? () => env.summarizer!.availability!(SUMMARIZER_OPTIONS) : undefined),
     probe(env.languageModel?.availability ? () => env.languageModel!.availability!() : undefined),
   ]);
   return { webgpu: !!adapter, builtinAi: builtinAiPresent(summarizer, languageModel) };

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from '../router';
-import { deleteRecording, getRecording, putRecording } from '@/lib/db';
+import { deleteRecording, getRecording, updateRecording } from '@/lib/db';
 import { videoStore } from '@/lib/videoStore';
 import { shortClock } from '@/lib/recorder';
 import { formatBytes } from '@/lib/time';
@@ -34,7 +34,8 @@ export default function Recovered() {
     if (!rec) return;
     setBusy(true);
     try {
-      await putRecording({ ...rec, status: 'processing', bytes: bytes || rec.bytes });
+      // A recovered take has no transcript still running, so notes must not wait on one.
+      await updateRecording(rec.id, (r) => ({ status: 'processing', bytes: bytes || r.bytes, transcriptPending: false }));
       replace('Processing', { recordingId: rec.id });
     } catch (error) {
       console.error('Klipkord: could not keep the recording', error);

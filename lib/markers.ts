@@ -1,4 +1,4 @@
-import { getRecording, putRecording } from './db';
+import { updateRecording } from './db';
 import { clockElapsed, type RecorderState } from './recorder';
 import type { MarkerKind, Recording } from './types';
 
@@ -27,11 +27,13 @@ export function withNote(rec: Recording, id: string, at: number, text: string): 
   return { ...rec, notes: [...rec.notes, { id, at, text }].sort((a, b) => a.at - b.at) };
 }
 
+// Patches only markers and notes, read and written in one transaction.
 async function update(recordingId: string, change: (rec: Recording) => Recording): Promise<boolean> {
-  const rec = await getRecording(recordingId);
-  if (!rec) return false;
-  await putRecording(change(rec));
-  return true;
+  const next = await updateRecording(recordingId, (rec) => {
+    const { markers, notes } = change(rec);
+    return { markers, notes };
+  });
+  return Boolean(next);
 }
 
 /** Saves a marker on the live recording and returns its id, or null when the recording is gone. */

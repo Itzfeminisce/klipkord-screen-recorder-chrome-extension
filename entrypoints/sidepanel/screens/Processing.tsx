@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from '../router';
-import { getRecording, putRecording } from '@/lib/db';
+import { getRecording, updateRecording } from '@/lib/db';
 import { useRecorder } from '@/lib/capture';
 import { shortClock } from '@/lib/recorder';
 import { formatBytes, formatClock } from '@/lib/time';
@@ -60,8 +60,7 @@ export default function Processing() {
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       if (!id) return;
-      void getRecording(id)
-        .then((r) => r && putRecording({ ...r, title: next.trim() || r.title }))
+      void updateRecording(id, (r) => ({ title: next.trim() || r.title }))
         .catch((error) => console.error('Klipkord: could not save the title', error));
     }, 400);
   }

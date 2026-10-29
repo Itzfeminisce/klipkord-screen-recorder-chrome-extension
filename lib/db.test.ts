@@ -3,7 +3,7 @@ import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   clearFolderHandle, closeDB, deleteRecording, getFolderHandle, getRecording, listRecordings, listUnfinished,
-  markInterrupted, putFolderHandle, putRecording,
+  markInterrupted, putFolderHandle, putRecording, updateRecording,
 } from './db';
 import type { Recording } from './types';
 
@@ -35,6 +35,34 @@ describe('db', () => {
     expect(await markInterrupted()).toBe(2);
     expect((await listUnfinished()).map((r) => r.id)).toEqual(['held', 'live']);
     expect((await getRecording('done'))?.status).toBe('ready');
+  });
+
+  it('stops processing records waiting on a transcript nobody is writing', async () => {
+    await putRecording({ ...rec('p', 1, 'processing'), transcriptPending: true });
+    expect(await markInterrupted()).toBe(0);
+    expect(await getRecording('p')).toMatchObject({ status: 'processing', transcriptPending: false });
+  });
+
+  it('patches a record and skips a missing one', async () => {
+    await putRecording(rec('a', 1));
+    expect(await updateRecording('a', { savedTo: { folder: 'F', at: 1, files: [] } })).toMatchObject({ id: 'a', savedTo: { folder: 'F' } });
+    expect(await updateRecording('a', () => null)).toBeUndefined();
+    expect(await updateRecording('gone', { title: 'x' })).toBeUndefined();
+    expect(await getRecording('gone')).toBeUndefined();
+  });
+
+  it('keeps every field when writers patch the same record at once', async () => {
+    await putRecording(rec('a', 1, 'recording'));
+    await Promise.all([
+      updateRecording('a', { duration: 5000, bytes: 99 }),
+      updateRecording('a', (r) => ({ markers: [...r.markers, { id: 'm2', at: 900, kind: 'step' }] })),
+      updateRecording('a', (r) => ({ notes: [...r.notes, { id: 'n1', at: 100, text: 'hi' }] })),
+      updateRecording('a', (r) => ({ markers: [...r.markers, { id: 'm3', at: 950, kind: 'bug' }] })),
+      updateRecording('a', { savedTo: { folder: 'F', at: 2, files: ['x'] } }),
+    ]);
+    const out = await getRecording('a');
+    expect(out).toMatchObject({ duration: 5000, bytes: 99, savedTo: { folder: 'F' }, notes: [{ id: 'n1' }] });
+    expect(out?.markers.map((m) => m.id)).toEqual(['m1', 'm2', 'm3']);
   });
 
   it('stores and clears the folder handle', async () => {

@@ -1,5 +1,5 @@
 import { cleanupStack, guard } from '@/lib/check/guard';
-import { deleteRecording, getRecording, putRecording } from '@/lib/db';
+import { deleteRecording, putRecording, updateRecording, type RecordingPatch } from '@/lib/db';
 import { onMessage, send, type MessageOf } from '@/lib/messages';
 import { createMix, createSilenceWatch, type Mix } from '@/lib/mix';
 import {
@@ -51,11 +51,33 @@ let take: Take | null = null;
 
 // One command at a time, so a shortcut and a click never interleave.
 let queue: Promise<unknown> = Promise.resolve();
+let inFlight = 0;
 function run<T>(fn: () => Promise<T>): Promise<T> {
-  const next = queue.then(fn);
+  inFlight++;
+  const next = queue.then(fn).finally(() => {
+    // The background skipped closing while this ran; tell it once nothing is left.
+    if (--inFlight === 0 && !busy()) void send({ type: 'transcript/idle' });
+  });
   queue = next.catch(() => undefined);
   return next;
 }
+
+// The background closes this document only when this says false.
+const busy = () => Boolean(streams || take || inFlight || currentStatus()?.busy);
+
+/** Waits for the last chunks to reach disk; past the limit the take keeps what was already committed. */
+async function saveChunks(t: Take): Promise<boolean> {
+  try {
+    await guard(Promise.all([t.videoWriter.flush(), t.voiceWriter?.flush()]).then(() => videoStore.close(t.id)), {
+      ms: FLUSH_MS, what: 'Saving the video',
+    });
+    return true;
+  } catch (error) {
+    console.error('Klipkord: could not save the last video chunks', error);
+    return false;
+  }
+}
+const FLUSH_MS = 30_000;
 
 const ok: RecorderReply = { ok: true };
 const fail = (error: string): RecorderReply => ({ ok: false, error });
@@ -230,11 +252,10 @@ async function begin(): Promise<RecorderReply> {
 const takeBytes = (t: Take) => t.videoWriter.bytes + (t.voiceWriter?.bytes ?? 0);
 
 // Keeps duration and size current so a crash leaves a recording Recovered can offer back.
-async function persist(t: Take, patch: Partial<Parameters<typeof putRecording>[0]> = {}) {
+// Patches only what the recorder owns: duration, bytes, status and the transcript fields.
+async function persist(t: Take, patch: RecordingPatch = {}) {
   try {
-    const rec = await getRecording(t.id);
-    if (!rec) return;
-    await putRecording({ ...rec, duration: clockElapsed(state.clock, Date.now()), bytes: takeBytes(t), ...transcriptPatch(t.id), ...patch });
+    await updateRecording(t.id, { duration: clockElapsed(state.clock, Date.now()), bytes: takeBytes(t), ...transcriptPatch(t.id), ...patch });
   } catch (error) {
     console.error('Klipkord: could not update the recording', error);
   }
@@ -257,6 +278,8 @@ async function pauseTake(): Promise<RecorderReply> {
   if (take.video.state === 'recording') take.video.pause();
   if (take.voice?.state === 'recording') take.voice.pause();
   pauseTranscript(true);
+  // Commits what is written so far; a crash while paused loses nothing.
+  void videoStore.close(take.id).catch((error) => console.error('Klipkord: could not save the video', error));
   setState({ status: 'paused', clock: clockPause(state.clock, Date.now()), silentMic: false });
   await persist(take, { status: 'paused' });
   return ok;
@@ -280,13 +303,14 @@ async function finish(endedBy: EndReason): Promise<RecorderReply> {
   t.timers.forEach(clearInterval);
   pauseTranscript(true);
   await Promise.all([recorderStopped(t.video), recorderStopped(t.voice)]);
-  await Promise.all([t.videoWriter.flush(), t.voiceWriter?.flush()]);
+  const saved = await saveChunks(t);
   take = null;
   stopCapture();
   const duration = clockElapsed(clock, Date.now());
   await persist(t, { status: 'processing', duration });
   await teardown();
   setState({ status: 'done', recordingId: t.id, endedBy, silentMic: false });
+  if (!saved) return fail('last chunks not saved in time');
   // Catch-up and the base pass run after the recorder is done; this document stays open until they finish.
   void finishTranscript(t.id, duration).catch((error) => console.error('Klipkord: could not finish the transcript', error));
   return ok;
@@ -301,7 +325,8 @@ async function dropTake() {
   t.timers.forEach(clearInterval);
   take = null;
   await Promise.all([recorderStopped(t.video), recorderStopped(t.voice)]);
-  await Promise.all([t.videoWriter.flush(), t.voiceWriter?.flush()]);
+  await guard(Promise.all([t.videoWriter.flush(), t.voiceWriter?.flush()]), { ms: FLUSH_MS, what: 'Stopping the writes' })
+    .catch((error) => console.error('Klipkord: could not stop the video writes', error));
   await videoStore.remove(t.id).catch((error) => console.error('Klipkord: could not delete the video', error));
   await deleteRecording(t.id).catch((error) => console.error('Klipkord: could not delete the recording', error));
 }
@@ -363,6 +388,7 @@ onMessage((msg) => {
     case 'recorder/mute': return run(() => mute(msg.muted));
     case 'recorder/bubble': return setBubble(msg.bubble);
     case 'transcript/get': return currentStatus() ?? { busy: false };
+    case 'offscreen/busy': return busy();
     case 'transcript/use-groq': return useGroq().then(() => true);
     default: return undefined;
   }
@@ -370,5 +396,6 @@ onMessage((msg) => {
 
 addEventListener('pagehide', () => {
   take?.timers.forEach(clearInterval);
+  if (take) void videoStore.close(take.id);
   void teardown();
 });

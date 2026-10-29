@@ -1,4 +1,6 @@
-import { getRecording, putRecording } from '../db';
+import { getRecording, updateRecording, type RecordingPatch } from '../db';
+import { send } from '../messages';
+import type { TranscriptStatus } from '../transcribe/queue';
 import { loadKeys } from '../keys';
 import type { FetchLike } from '../llm';
 import { getSettings } from '../settings';
@@ -200,7 +202,9 @@ export interface NotesProgress {
 
 export interface JobDeps {
   getRecording: (id: string) => Promise<Recording | undefined>;
-  putRecording: (r: Recording) => Promise<void>;
+  updateRecording: (id: string, change: RecordingPatch | ((rec: Recording) => RecordingPatch | null)) => Promise<Recording | undefined>;
+  /** True while the offscreen document is still transcribing this recording. */
+  transcribing: (id: string) => Promise<boolean>;
   getSettings: () => Promise<Settings>;
   loadKeys: () => Promise<Record<string, string>>;
   fetchFn: FetchLike;
@@ -209,8 +213,15 @@ export interface JobDeps {
   globalObject?: object;
 }
 
+/** The longest notes wait on a transcript that is still being written. */
+export const WAIT_MAX_MS = 30 * 60_000;
+
 const liveDeps = (): JobDeps => ({
-  getRecording, putRecording, getSettings, loadKeys,
+  getRecording, updateRecording, getSettings, loadKeys,
+  transcribing: async (id) => {
+    const status = await send<TranscriptStatus | { busy: false }>({ type: 'transcript/get' }).catch(() => undefined);
+    return Boolean(status?.busy && 'recordingId' in status && status.recordingId === id);
+  },
   fetchFn: (u, i) => fetch(u, i), sleep: (ms) => new Promise((r) => setTimeout(r, ms)), now: Date.now,
 });
 
@@ -274,8 +285,7 @@ export async function startNotes(id: string, opts: StartOptions = {}, deps: JobD
 
 async function markReady(id: string, deps: JobDeps): Promise<void> {
   try {
-    const rec = await deps.getRecording(id);
-    if (rec && rec.status === 'processing') await deps.putRecording({ ...rec, status: 'ready' });
+    await deps.updateRecording(id, (rec) => (rec.status === 'processing' ? { status: 'ready' } : null));
   } catch (error) {
     console.error('Klipkord: could not update the recording', error);
   }
@@ -283,8 +293,7 @@ async function markReady(id: string, deps: JobDeps): Promise<void> {
 
 async function applyTitle(id: string, title: string | undefined, deps: JobDeps): Promise<void> {
   if (!title) return;
-  const rec = await deps.getRecording(id);
-  if (rec && rec.title === DEFAULT_TITLE) await deps.putRecording({ ...rec, title });
+  await deps.updateRecording(id, (rec) => (rec.title === DEFAULT_TITLE ? { title } : null));
 }
 
 async function run(id: string, opts: StartOptions, deps: JobDeps, signal: AbortSignal, set: (p: Partial<NotesProgress>) => void) {
@@ -292,7 +301,9 @@ async function run(id: string, opts: StartOptions, deps: JobDeps, signal: AbortS
   if (!rec) throw new NotesError('That recording is not here any more.');
   if (rec.status === 'recording' || rec.status === 'paused') return;
   if (rec.summary && !opts.style) { set({ phase: 'done', pct: 100, style: rec.summary.style }); return; }
-  while (rec.transcriptPending) {
+  // Waits only while the offscreen document is transcribing this recording, and never past WAIT_MAX_MS.
+  const waitUntil = deps.now() + WAIT_MAX_MS;
+  while (rec.transcriptPending && deps.now() < waitUntil && (await deps.transcribing(id))) {
     await deps.sleep(1_000);
     if (signal.aborted) return;
     const fresh = await deps.getRecording(id);
@@ -304,7 +315,7 @@ async function run(id: string, opts: StartOptions, deps: JobDeps, signal: AbortS
   if (!rec.transcript.length) {
     const style = opts.style ?? settings.defaultStyle ?? guessStyle(rec.markers);
     const notes: Notes = { style, detected: style, engine: '', summary: '', points: [], actions: [], chapters: [] };
-    await deps.putRecording({ ...rec, summary: notes, status: 'ready' });
+    await deps.updateRecording(id, { summary: notes, status: 'ready' });
     set({ phase: 'done', pct: 100, style });
     return;
   }
@@ -340,8 +351,7 @@ async function run(id: string, opts: StartOptions, deps: JobDeps, signal: AbortS
     summary: parsed.summary, points: parsed.points, actions: parsed.actions, chapters: parsed.chapters,
     ...(parsed.sections ? { sections: parsed.sections } : {}),
   };
-  const fresh = (await deps.getRecording(id)) ?? rec;
-  await deps.putRecording({ ...fresh, summary: notes, status: 'ready' });
+  await deps.updateRecording(id, { summary: notes, status: 'ready' });
   set({ phase: 'done', pct: 100 });
 }
 

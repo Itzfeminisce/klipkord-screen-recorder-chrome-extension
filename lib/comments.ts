@@ -1,4 +1,4 @@
-import { getRecording, putRecording } from './db';
+import { updateRecording } from './db';
 import type { Comment, KeptRange, Marker, Recording, Segment, TimedNote } from './types';
 
 /** Open comments first-to-last on the timeline; ties keep the order they were written. */
@@ -29,11 +29,7 @@ export const resolveComment = (list: Comment[], id: string): Comment[] => list.m
 
 /** Saves comments onto the latest copy of the recording, so a notes job writing at the same time is not undone. */
 export async function saveComments(recordingId: string, comments: Comment[]): Promise<Recording | null> {
-  const rec = await getRecording(recordingId);
-  if (!rec) return null;
-  const next = { ...rec, comments };
-  await putRecording(next);
-  return next;
+  return (await updateRecording(recordingId, { comments })) ?? null;
 }
 
 /** Index of the line being spoken at `ms`: the last segment that started. -1 before the first. */

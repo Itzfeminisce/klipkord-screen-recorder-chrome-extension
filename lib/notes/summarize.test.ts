@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { chunkLines, etaText, fitTranscript, getProgress, parseNotes, repairJson, resetNotesJobs, startNotes, transcriptLines, truncateMiddle, type JobDeps } from './summarize';
+import { chunkLines, etaText, fitTranscript, getProgress, parseNotes, repairJson, resetNotesJobs, startNotes, transcriptLines, truncateMiddle, WAIT_MAX_MS, type JobDeps } from './summarize';
 import type { Engine } from './engines';
 import { defaultSettings } from './testSettings';
 import type { Recording, Segment } from '../types';
@@ -94,7 +94,14 @@ function setup(initial: Recording, replies: string[]) {
   const complete = vi.fn(async () => queue.shift() ?? '{}');
   const deps: JobDeps = {
     getRecording: async () => stored,
-    putRecording: async (r) => { stored = r; saved.push(r); },
+    updateRecording: async (_id, change) => {
+      const patch = typeof change === 'function' ? change(stored) : change;
+      if (!patch) return stored;
+      stored = { ...stored, ...patch };
+      saved.push(stored);
+      return stored;
+    },
+    transcribing: async () => true,
     getSettings: async () => defaultSettings(),
     loadKeys: async () => ({ GROQ_API_KEY: 'gsk_test' }),
     fetchFn: async () => { throw new TypeError('offline'); },
@@ -134,10 +141,30 @@ describe('startNotes', () => {
     expect(t.stored.title).toBe('My title');
   });
 
+  it('stops waiting when nothing is transcribing the recording', async () => {
+    const t = setup(rec({ transcriptPending: true }), ['{"style":"general"}', NOTES]);
+    let polls = 0;
+    t.deps.sleep = async () => { polls++; };
+    t.deps.transcribing = async () => polls < 3;
+    await startNotes('r1', {}, t.deps);
+    expect(polls).toBe(3);
+    expect(t.stored.summary).toBeDefined();
+  });
+
+  it('stops waiting after WAIT_MAX_MS even while transcribing', async () => {
+    const t = setup(rec({ transcriptPending: true }), ['{"style":"general"}', NOTES]);
+    let clock = 0;
+    t.deps.now = () => clock;
+    t.deps.sleep = async (ms) => { clock += ms; };
+    await startNotes('r1', {}, t.deps);
+    expect(clock).toBe(WAIT_MAX_MS);
+    expect(t.stored.summary).toBeDefined();
+  });
+
   it('waits for the transcript pass to finish before writing', async () => {
     const t = setup(rec({ transcriptPending: true }), ['{"style":"general"}', NOTES]);
     let polls = 0;
-    t.deps.sleep = async () => { if (++polls === 2) await t.deps.putRecording({ ...(await t.deps.getRecording('r1'))!, transcriptPending: false }); };
+    t.deps.sleep = async () => { if (++polls === 2) await t.deps.updateRecording('r1', { transcriptPending: false }); };
     await startNotes('r1', {}, t.deps);
     expect(polls).toBe(2);
     expect(t.stored.summary).toBeDefined();

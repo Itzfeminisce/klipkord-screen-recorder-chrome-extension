@@ -34,6 +34,25 @@ export async function closeDB(): Promise<void> {
 export async function putRecording(r: Recording): Promise<void> {
   await (await getDB()).put('recordings', r);
 }
+export type RecordingPatch = Partial<Omit<Recording, 'id'>>;
+
+/**
+ * Reads and writes one record inside a single readwrite transaction, so writers in other contexts
+ * never overwrite each other's fields. Each writer patches only the fields it owns.
+ * Returns the stored record, or undefined when it is gone (or the function returns null to skip).
+ */
+export async function updateRecording(
+  id: string,
+  change: RecordingPatch | ((rec: Recording) => RecordingPatch | null),
+): Promise<Recording | undefined> {
+  const tx = (await getDB()).transaction('recordings', 'readwrite');
+  const rec = await tx.store.get(id);
+  const patch = rec && (typeof change === 'function' ? change(rec) : change);
+  const next = rec && patch ? { ...rec, ...patch, id } : undefined;
+  if (next) await tx.store.put(next);
+  await tx.done;
+  return next;
+}
 export async function getRecording(id: string): Promise<Recording | undefined> {
   return (await getDB()).get('recordings', id);
 }
@@ -51,13 +70,21 @@ export async function listUnfinished(): Promise<Recording[]> {
   const all = await (await getDB()).getAllFromIndex('recordings', 'status', 'unfinished');
   return all.sort((a, b) => b.createdAt - a.createdAt);
 }
-/** Browser start-up: anything still 'recording' or 'paused' was cut off, so mark it 'unfinished'. */
+/**
+ * Browser start-up with no offscreen document: anything still 'recording' or 'paused' was cut off,
+ * so mark it 'unfinished'. A 'processing' record has no live transcript any more, so it stops waiting on one.
+ */
 export async function markInterrupted(): Promise<number> {
   const db = await getDB();
   const tx = db.transaction('recordings', 'readwrite');
   const index = tx.store.index('status');
   const cut = [...(await index.getAll('recording')), ...(await index.getAll('paused'))];
-  await Promise.all([...cut.map((r) => tx.store.put({ ...r, status: 'unfinished' })), tx.done]);
+  const stalled = (await index.getAll('processing')).filter((r) => r.transcriptPending);
+  await Promise.all([
+    ...cut.map((r) => tx.store.put({ ...r, status: 'unfinished', transcriptPending: false })),
+    ...stalled.map((r) => tx.store.put({ ...r, transcriptPending: false })),
+    tx.done,
+  ]);
   return cut.length;
 }
 

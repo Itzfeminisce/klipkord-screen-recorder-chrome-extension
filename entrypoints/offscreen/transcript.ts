@@ -1,4 +1,4 @@
-import { getRecording, putRecording } from '@/lib/db';
+import { updateRecording } from '@/lib/db';
 import { send } from '@/lib/messages';
 import type { Recording, Segment } from '@/lib/types';
 import { videoStore } from '@/lib/videoStore';
@@ -170,8 +170,7 @@ export function stopCapture(): Live | null {
 
 async function save(recordingId: string, patch: Partial<Recording>) {
   try {
-    const rec = await getRecording(recordingId);
-    if (rec) await putRecording({ ...rec, ...patch });
+    await updateRecording(recordingId, patch);
   } catch (error) {
     console.error('Klipkord: could not save the transcript', error);
   }
