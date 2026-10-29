@@ -3,6 +3,7 @@ import { Spinner } from '../components';
 import { useRouter } from '../router';
 import { bubbleMode } from '@/lib/bubble';
 import { putFolderHandle } from '@/lib/db';
+import { forgetGoogleToken, getGoogleToken } from '@/lib/googleAuth';
 import { wasDisconnected } from '@/lib/penvApp';
 import { getSettings, onSettingsChanged, updateSettings } from '@/lib/settings';
 import { notesOptions, penvRowStatus, REPO_URL, SHORTCUTS_URL, transcriptsStatus } from '@/lib/setup';
@@ -43,10 +44,12 @@ export default function Settings() {
   const [s, setS] = useState<SettingsData | null>(null);
   const [gone, setGone] = useState(false);
   const [used, setUsed] = useState<number | null>(null);
+  const [google, setGoogle] = useState(false);
 
   useEffect(() => {
     getSettings().then(setS).catch((error) => console.error('Klipkord: could not read settings', error));
     wasDisconnected().then(setGone).catch(() => undefined);
+    getGoogleToken().then((t) => setGoogle(!!t), (error) => console.error('Klipkord: could not read the Google sign-in', error));
     videoStore.usage().then((u) => setUsed(u.usage)).catch((error) => console.error('Klipkord: could not read storage use', error));
     return onSettingsChanged(setS);
   }, []);
@@ -157,6 +160,20 @@ export default function Settings() {
             </button>
           </div>
         </Section>
+
+        {/* The frame has only the connected row; with no Google sign-in there is nothing to show. */}
+        {google && (
+          <Section title="Sharing links">
+            <div style={{ ...CARD, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 14, fontWeight: 500 }}>Google Drive</span>
+                <span style={{ fontSize: 12, color: '#15803D' }}>Connected · sees only files Klipkord uploads</span>
+              </span>
+              <button type="button" onClick={() => forgetGoogleToken().then(() => setGoogle(false), (error) => console.error('Klipkord: could not disconnect Google', error))}
+                style={{ height: 36, padding: '0 12px', border: '1px solid #E8E8EB', borderRadius: 10, background: '#FFFFFF', font: 'inherit', fontSize: 13, fontWeight: 500, color: '#111114', cursor: 'pointer' }}>Disconnect</button>
+            </div>
+          </Section>
+        )}
 
         <Section title="Recording">
           <div style={{ ...CARD, display: 'flex', flexDirection: 'column' }}>

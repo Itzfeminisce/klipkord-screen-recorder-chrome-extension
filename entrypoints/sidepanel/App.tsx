@@ -23,6 +23,7 @@ import EditTranscript from './screens/EditTranscript';
 import Cleanup from './screens/Cleanup';
 import Export from './screens/Export';
 import GifClip from './screens/GifClip';
+import DriveLink from './screens/DriveLink';
 import Saved from './screens/Saved';
 import Library from './screens/Library';
 import LibraryEmpty from './screens/LibraryEmpty';
@@ -55,6 +56,7 @@ export const SCREENS: Record<ScreenName, ComponentType> = {
   Cleanup,
   Export,
   GifClip,
+  DriveLink,
   Saved,
   Library,
   LibraryEmpty,
