@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Spinner } from '../components';
 import { useRouter } from '../router';
+import { bubbleMode } from '@/lib/bubble';
 import { putFolderHandle } from '@/lib/db';
 import { wasDisconnected } from '@/lib/penvApp';
 import { getSettings, onSettingsChanged, updateSettings } from '@/lib/settings';
@@ -172,6 +173,22 @@ export default function Settings() {
             <div style={{ ...ROW, padding: '12px 14px' }}>
               <span>Storage</span>
               <span style={VALUE}>{used !== null && <>{formatBytes(used)} · </>}<button type="button" onClick={() => navigate('Storage')} style={LINK}>Free up space</button></span>
+            </div>
+            {DIVIDER}
+            <div style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 14 }}>Camera bubble</span>
+              <div role="radiogroup" aria-label="Camera bubble" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4, padding: 4, borderRadius: 10, background: '#F1F1F3' }}>
+                {([['floating', 'Floating on screen'], ['video', 'Drawn into the video']] as const).map(([mode, label]) => {
+                  const on = bubbleMode(s.bubble) === mode;
+                  return (
+                    <button key={mode} type="button" role="radio" aria-checked={on} onClick={() => void save({ bubble: { mode } })}
+                      style={{ height: 32, borderRadius: 7, border: 'none', font: 'inherit', fontSize: 12, cursor: 'pointer', ...(on ? { background: '#FFFFFF', fontWeight: 600, boxShadow: '0 1px 2px rgba(16,16,20,0.08)' } : { background: 'transparent', fontWeight: 500, color: '#5F6168' }) }}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+              <span style={{ fontSize: 12, lineHeight: 1.45, color: '#6E7079' }}>Tab recordings always draw the bubble into the video.</span>
             </div>
           </div>
         </Section>

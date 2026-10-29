@@ -7,7 +7,9 @@ import {
   createChunkWriter, shortClock, type EndReason, type RecorderState,
 } from '@/lib/recorder';
 import { pickSource, type RecorderReply } from '@/lib/capture';
-import type { Bubble } from '@/lib/bubble';
+import { floatsBubble, type Bubble, type BubbleStatus } from '@/lib/bubble';
+import { updateSettings } from '@/lib/settings';
+import { openFloatingBubble, type FloatingBubble } from './bubble';
 import { createCompositor, type Compositor, type Ticker } from '@/lib/compositor';
 import { freeBytes, shouldAutoStop } from '@/lib/storageMath';
 import { videoStore } from '@/lib/videoStore';
@@ -38,10 +40,56 @@ setInterval(paint, 1000);
 
 // Read the window up front: sidePanel.open must run inside the click itself.
 let windowId: number | undefined;
-void chrome.tabs.getCurrent().then((tab) => { windowId = tab?.windowId; });
+let tabId: number | undefined;
+void chrome.tabs.getCurrent().then((tab) => { windowId = tab?.windowId; tabId = tab?.id; });
 document.getElementById('back')!.addEventListener('click', () => {
   if (windowId !== undefined) chrome.sidePanel.open({ windowId }).catch((error) => console.error('Klipkord: could not open the side panel', error));
 });
+
+// The floating camera bubble (window or screen capture, "Floating on screen"). Chrome opens it only from a click here.
+let wantBubble: Bubble | null = null;
+let floating: FloatingBubble | null = null;
+let opening = false;
+const bubbleShow = document.getElementById('bubble-show')!;
+const bubbleOn = document.getElementById('bubble-on')!;
+const bubbleStatus = (): BubbleStatus => ({ wanted: Boolean(wantBubble), open: Boolean(floating), tabId, windowId });
+function paintBubble() {
+  bubbleShow.hidden = !wantBubble || Boolean(floating);
+  bubbleOn.hidden = !wantBubble || !floating;
+  void send({ type: 'bubble/status', status: bubbleStatus() });
+}
+function setFloating(bubble: Bubble | null) {
+  wantBubble = bubble;
+  if (!bubble && floating) {
+    const open = floating;
+    floating = null;
+    open.close();
+  }
+  paintBubble();
+}
+document.getElementById('bubble-open')!.addEventListener('click', () => {
+  if (!wantBubble || floating || opening) return;
+  opening = true;
+  openFloatingBubble(wantBubble.size, openCamera, {
+    resized(size) {
+      if (wantBubble) wantBubble = { ...wantBubble, size };
+      updateSettings({ bubble: { size } }).catch((error) => console.error('Klipkord: could not save the bubble size', error));
+    },
+    closed() {
+      floating = null;
+      paintBubble();
+    },
+  })
+    .then((opened) => {
+      // The take ended while the camera was opening.
+      if (opened && !wantBubble) return opened.close();
+      floating = opened;
+      paintBubble();
+    })
+    .catch((error) => console.error('Klipkord: could not open the camera bubble', error))
+    .finally(() => { opening = false; });
+});
+document.getElementById('bubble-hide')!.addEventListener('click', () => floating?.close());
 
 const stopTracks = (stream: MediaStream | null | undefined) => stream?.getTracks().forEach((t) => t.stop());
 
@@ -156,6 +204,8 @@ async function openCamera(): Promise<MediaStream | null> {
 async function openPicture(video: MediaStream, msg: MessageOf<'recorder/prepare'>, cleanup: ReturnType<typeof cleanupStack>) {
   const screenTrack = video.getVideoTracks()[0];
   if (!screenTrack) throw new Error('No video track');
+  // A floating bubble is recorded as part of the screen, so nothing is drawn.
+  if (floatsBubble(msg.mode, msg.bubble, msg.camera)) return { picture: screenTrack, compositor: null };
   const camera = msg.camera ? await openCamera() : null;
   if (!camera) return { picture: screenTrack, compositor: null };
   // Stops the camera track (light off) on every teardown path.
@@ -201,6 +251,7 @@ async function prepare(msg: MessageOf<'recorder/prepare'>): Promise<RecorderRepl
     track.addEventListener('ended', () => void run(sharingEnded));
     const { picture, compositor } = await openPicture(video, msg, cleanup);
     streams = { video, picture, compositor, mic, audio, mix, cleanup };
+    setFloating(floatsBubble(msg.mode, msg.bubble, msg.camera) ? msg.bubble : null);
     setState({
       ...IDLE,
       status: 'armed', mode: msg.mode, quality: msg.quality,
@@ -389,6 +440,10 @@ async function sharingEnded(): Promise<RecorderReply> {
 
 async function setBubble(bubble: Bubble): Promise<RecorderReply> {
   streams?.compositor?.setBubble(bubble);
+  if (wantBubble) {
+    wantBubble = { ...wantBubble, size: bubble.size };
+    floating?.setSize(bubble.size);
+  }
   return ok;
 }
 
@@ -402,6 +457,7 @@ async function mute(muted: boolean): Promise<RecorderReply> {
 async function teardown() {
   const s = streams;
   streams = null;
+  if (wantBubble || floating) setFloating(null);
   s?.cleanup.run((error) => console.error('Klipkord: could not release capture', error));
 }
 
@@ -417,6 +473,7 @@ onMessage((msg) => {
     case 'recorder/discard': return run(discard);
     case 'recorder/mute': return run(() => mute(msg.muted));
     case 'recorder/bubble': return setBubble(msg.bubble);
+    case 'bubble/get': return bubbleStatus();
     case 'transcript/get': return currentStatus() ?? { busy: false };
     case 'offscreen/busy': return busy();
     case 'transcript/use-groq': return useGroq().then(() => true);

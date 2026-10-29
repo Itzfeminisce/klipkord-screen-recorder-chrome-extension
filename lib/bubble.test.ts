@@ -1,5 +1,50 @@
 import { describe, expect, it } from 'vitest';
-import { BUBBLE_SHARE, CORNERS, SIZES, bubbleRect, fitRect, squareCrop } from './bubble';
+import {
+  BUBBLE_SHARE, CORNERS, FLOATING_SIDE, SIZES, bubbleMode, bubbleRect, fitRect, floatsBubble, squareCrop, stepSize,
+} from './bubble';
+
+describe('floatsBubble', () => {
+  const floating = { corner: 'bottom-left', size: 'M', mode: 'floating' } as const;
+  const video = { ...floating, mode: 'video' } as const;
+  const old = { corner: 'bottom-left', size: 'M' } as const;
+
+  it('floats for a window or the whole screen with "Floating on screen"', () => {
+    expect(floatsBubble('window', floating, true)).toBe(true);
+    expect(floatsBubble('screen', floating, true)).toBe(true);
+  });
+  it('treats a setting without a mode as floating', () => {
+    expect(bubbleMode(old)).toBe('floating');
+    expect(floatsBubble('screen', old, true)).toBe(true);
+  });
+  it('always draws into a tab recording', () => {
+    expect(floatsBubble('tab', floating, true)).toBe(false);
+  });
+  it('draws with "Drawn into the video"', () => {
+    expect(floatsBubble('window', video, true)).toBe(false);
+    expect(floatsBubble('screen', video, true)).toBe(false);
+  });
+  it('has nothing to float with the camera off', () => {
+    expect(floatsBubble('screen', floating, false)).toBe(false);
+    expect(floatsBubble(undefined, floating, true)).toBe(false);
+  });
+});
+
+describe('stepSize', () => {
+  it('steps up and down one size', () => {
+    expect(stepSize('S', 1)).toBe('M');
+    expect(stepSize('M', 1)).toBe('L');
+    expect(stepSize('L', -1)).toBe('M');
+    expect(stepSize('M', -1)).toBe('S');
+  });
+  it('stays at the ends', () => {
+    expect(stepSize('L', 1)).toBe('L');
+    expect(stepSize('S', -1)).toBe('S');
+  });
+  it('grows the floating window with each size', () => {
+    expect(FLOATING_SIDE.S).toBeLessThan(FLOATING_SIDE.M);
+    expect(FLOATING_SIDE.M).toBeLessThan(FLOATING_SIDE.L);
+  });
+});
 
 describe('bubbleRect', () => {
   const W = 1920;
