@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { useRouter } from '../router';
+import { LiveBubblePreview } from '../components/BubblePreview';
 import { command, useNow, useRecorder } from '@/lib/capture';
 import { clockElapsed, type RecorderState } from '@/lib/recorder';
 import { isDiskLow, minutesLeft } from '@/lib/storageMath';
@@ -76,8 +77,7 @@ export default function Recording() {
 
       <div style={{ padding: '14px 24px 0', display: 'flex', alignItems: 'center', gap: 16 }}>
         <span style={{ fontFamily: MONO, fontSize: 44, fontWeight: 500, letterSpacing: '-0.02em' }}>{formatClock(elapsed)}</span>
-        {/* T4 slot: live preview with the camera bubble. */}
-        <span data-slot="bubble-preview" style={{ flexGrow: 1 }} />
+        <LiveBubblePreview />
       </div>
 
       <div style={{ padding: '16px 24px 0', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>

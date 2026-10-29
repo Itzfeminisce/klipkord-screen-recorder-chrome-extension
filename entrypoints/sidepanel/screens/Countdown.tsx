@@ -26,13 +26,13 @@ export default function Countdown() {
       setCapture(settings.capture);
       // Restart from Paused keeps the picked source: count down again on the same streams.
       if ((await getRecorderState()).status === 'armed' && (await hasOffscreen())) return setPhase('counting');
-      const { mode, mic, sound, quality } = settings.capture;
+      const { mode, mic, sound, quality, camera } = settings.capture;
       const picked = await pickSource(mode, sound);
       if (!picked) return setPhase('cancelled');
       await ensureOffscreen();
       const dpr = window.devicePixelRatio || 1;
       const size = captureSize(quality, screen.width * dpr, screen.height * dpr);
-      const reply = await command({ type: 'recorder/prepare', streamId: picked.streamId, mode, mic, sound: sound && picked.canRequestAudioTrack, quality, ...size });
+      const reply = await command({ type: 'recorder/prepare', streamId: picked.streamId, mode, mic, sound: sound && picked.canRequestAudioTrack, quality, ...size, camera, bubble: settings.bubble });
       if (!reply.ok) throw new Error(reply.error);
       setPhase('counting');
     } catch (error) {

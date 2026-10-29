@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from '../router';
+import { BubbleControls, BubblePreview, useCamera } from '../components/BubblePreview';
 import { getSettings, onSettingsChanged, updateSettings } from '@/lib/settings';
 import { listRecordings } from '@/lib/db';
-import { onStartRequest, takeStartRequest, useRecorder } from '@/lib/capture';
+import { command, onStartRequest, takeStartRequest, useRecorder } from '@/lib/capture';
 import { meterBars, rms } from '@/lib/mix';
 import { shortClock } from '@/lib/recorder';
 import type { CaptureMode, NoteStyle, Quality, Recording, Settings } from '@/lib/types';
@@ -164,6 +165,7 @@ export default function Home() {
   const [last, setLast] = useState<Recording | null>(null);
   const capture = settings?.capture;
   const meter = useMicMeter(Boolean(capture?.mic));
+  const camera = useCamera(Boolean(capture?.camera));
 
   useEffect(() => {
     getSettings().then(setSettings, (error) => console.error('Klipkord: could not read settings', error));
@@ -194,6 +196,15 @@ export default function Home() {
     updateSettings({ capture: patch }).catch((error) => console.error('Klipkord: could not save capture settings', error));
   }
 
+  function setBubble(patch: Partial<Settings['bubble']>) {
+    if (!settings) return;
+    const bubble = { ...settings.bubble, ...patch };
+    setSettings({ ...settings, bubble });
+    updateSettings({ bubble: patch }).catch((error) => console.error('Klipkord: could not save bubble settings', error));
+    // A recorder already holding the streams moves the bubble too.
+    void command({ type: 'recorder/bubble', bubble });
+  }
+
   if (!settings || !capture) return <main className="screen" style={{ background: '#F6F6F7' }} />;
   const soundLabel = capture.mode === 'screen' ? 'Include computer sound' : 'Include tab sound';
   const bars = meterBars(meter.level);
@@ -208,12 +219,17 @@ export default function Home() {
         </>}
       />
 
-      {(capture.mic && meter.blocked) || (capture.mode === 'window' && capture.sound) ? (
+      {(capture.mic && meter.blocked) || (capture.camera && camera.busy) || (capture.mode === 'window' && capture.sound) ? (
         <div style={{ margin: '12px 24px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {capture.mic && meter.blocked && (
             <StateCard icon={ICONS.micOff} tone="red" title="Klipkord can’t use your microphone"
               body="Chrome has blocked it for Klipkord. You can still record your screen without your voice."
               action="Allow microphone" onAction={() => navigate('Permissions')} />
+          )}
+          {capture.camera && camera.busy && (
+            <StateCard icon={ICONS.camera} tone="amber" title="Another app is using your camera"
+              body="Close it there and the bubble comes back, or record without it."
+              action="Record without camera" onAction={() => setCapture({ camera: false })} />
           )}
           {capture.mode === 'window' && capture.sound && (
             <StateCard icon={ICONS.noSound} tone="grey" title="A single window can’t include its sound"
@@ -223,8 +239,8 @@ export default function Home() {
         </div>
       ) : null}
 
-      {/* T4 slot: bubble preview with corner (4) and size (S, M, L) controls. */}
-      <div data-slot="bubble-preview" />
+      <BubblePreview bubble={settings.bubble} camera={capture.camera && !camera.busy} stream={camera.stream} />
+      <BubbleControls bubble={settings.bubble} onChange={setBubble} />
 
       <div style={{ margin: '16px 24px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 500, color: '#5F6168' }}>What to record</span>

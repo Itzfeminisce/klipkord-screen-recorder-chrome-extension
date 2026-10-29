@@ -7,6 +7,8 @@ import {
   createChunkWriter, type EndReason, type RecorderState,
 } from '@/lib/recorder';
 import type { RecorderReply } from '@/lib/capture';
+import type { Bubble } from '@/lib/bubble';
+import { createCompositor, type Compositor, type Ticker } from '@/lib/compositor';
 import { freeBytes, shouldAutoStop } from '@/lib/storageMath';
 import { videoStore } from '@/lib/videoStore';
 
@@ -23,6 +25,8 @@ const stopTracks = (stream: MediaStream | null | undefined) => stream?.getTracks
 
 interface Streams {
   video: MediaStream;
+  picture: MediaStreamTrack;        // what goes into the video's picture: the screen, or the screen with the bubble
+  compositor: Compositor | null;
   mic: MediaStream | null;
   audio: MediaStreamTrack | null;   // what goes into the video's sound
   mix: Mix;
@@ -84,6 +88,45 @@ async function openMic(): Promise<MediaStream | null> {
   }
 }
 
+// One worker clock for the compositor; each take starts and stops it.
+const tick: Ticker = (fps, onTick) => {
+  const worker = new Worker(new URL('./tick.worker.ts', import.meta.url), { type: 'module' });
+  worker.onmessage = onTick;
+  worker.postMessage({ fps });
+  return () => worker.terminate();
+};
+
+/** Null when the camera is busy, blocked or missing: the recording goes on without the bubble. */
+async function openCamera(): Promise<MediaStream | null> {
+  try {
+    return await guard(navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, frameRate: 30 } }), {
+      ms: 15_000, what: 'Camera', dispose: stopTracks,
+    });
+  } catch (error) {
+    console.error('Klipkord: could not open the camera', error);
+    return null;
+  }
+}
+
+/** The screen with the bubble drawn in, or the screen track itself when the camera is off or busy. */
+async function openPicture(video: MediaStream, msg: MessageOf<'recorder/prepare'>, cleanup: ReturnType<typeof cleanupStack>) {
+  const screenTrack = video.getVideoTracks()[0];
+  if (!screenTrack) throw new Error('No video track');
+  const camera = msg.camera ? await openCamera() : null;
+  if (!camera) return { picture: screenTrack, compositor: null };
+  // Stops the camera track (light off) on every teardown path.
+  cleanup.add(() => stopTracks(camera));
+  try {
+    const compositor = await guard(createCompositor(video, camera, msg.bubble, tick), { ms: 10_000, what: 'Compositor', dispose: (c) => c.stop() });
+    cleanup.add(() => compositor.stop());
+    return { picture: compositor.track, compositor };
+  } catch (error) {
+    console.error('Klipkord: could not start the camera bubble', error);
+    stopTracks(camera);
+    return { picture: screenTrack, compositor: null };
+  }
+}
+
 async function prepare(msg: MessageOf<'recorder/prepare'>): Promise<RecorderReply> {
   await teardown();
   const cleanup = cleanupStack();
@@ -107,7 +150,8 @@ async function prepare(msg: MessageOf<'recorder/prepare'>): Promise<RecorderRepl
     const track = video.getVideoTracks()[0];
     if (!track) throw new Error('No video track');
     track.addEventListener('ended', () => void run(sharingEnded));
-    streams = { video, mic, audio, mix, cleanup };
+    const { picture, compositor } = await openPicture(video, msg, cleanup);
+    streams = { video, picture, compositor, mic, audio, mix, cleanup };
     setState({
       ...IDLE,
       status: 'armed', mode: msg.mode, quality: msg.quality,
@@ -134,8 +178,7 @@ async function begin(): Promise<RecorderReply> {
   if (!streams || state.status !== 'armed') return fail('not armed');
   const id = crypto.randomUUID();
   const quality = state.quality ?? '1080p';
-  const videoTrack = streams.video.getVideoTracks()[0];
-  if (!videoTrack) return fail('no video');
+  const videoTrack = streams.picture;
   const tracks = streams.audio ? [videoTrack, streams.audio] : [videoTrack];
   const mime = chooseMime((t) => MediaRecorder.isTypeSupported(t), Boolean(streams.audio));
   const onError = (error: unknown) => console.error('Klipkord: could not save a video chunk', error);
@@ -276,13 +319,18 @@ async function sharingEnded(): Promise<RecorderReply> {
   return ok;
 }
 
+async function setBubble(bubble: Bubble): Promise<RecorderReply> {
+  streams?.compositor?.setBubble(bubble);
+  return ok;
+}
+
 async function mute(muted: boolean): Promise<RecorderReply> {
   streams?.mic?.getAudioTracks().forEach((t) => (t.enabled = !muted));
   setState({ muted, silentMic: false });
   return ok;
 }
 
-/** Stops every track (camera and mic lights off) and closes the mixer. */
+/** Stops every track (camera and mic lights off), the compositor and the mixer. */
 async function teardown() {
   const s = streams;
   streams = null;
@@ -300,6 +348,7 @@ onMessage((msg) => {
     case 'recorder/restart': return run(restart);
     case 'recorder/discard': return run(discard);
     case 'recorder/mute': return run(() => mute(msg.muted));
+    case 'recorder/bubble': return setBubble(msg.bubble);
     default: return undefined;
   }
 });

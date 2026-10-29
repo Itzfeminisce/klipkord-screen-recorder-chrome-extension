@@ -1,4 +1,4 @@
-import type { CaptureMode, MarkerKind, Quality } from './types';
+import type { CaptureMode, MarkerKind, Quality, Settings } from './types';
 import type { RecorderState } from './recorder';
 
 /** Runtime messages. Keyboard commands arrive as these; T3 and T5 act on them. */
@@ -7,7 +7,8 @@ export type Message =
   | { type: 'recording/pause' }
   | { type: 'marker/add'; kind: MarkerKind }
   // Side panel and background → offscreen recorder (T3).
-  | { type: 'recorder/prepare'; streamId: string; mode: CaptureMode; mic: boolean; sound: boolean; quality: Quality; maxWidth: number; maxHeight: number }
+  | { type: 'recorder/prepare'; streamId: string; mode: CaptureMode; mic: boolean; sound: boolean; quality: Quality; maxWidth: number; maxHeight: number; camera: boolean; bubble: Settings['bubble'] }
+  | { type: 'recorder/bubble'; bubble: Settings['bubble'] }   // corner or size changed (T4)
   | { type: 'recorder/begin' }
   | { type: 'recorder/pause' }
   | { type: 'recorder/resume' }
