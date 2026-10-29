@@ -23,6 +23,7 @@ import ReviewComments from './screens/ReviewComments';
 import ReviewAsk from './screens/ReviewAsk';
 import NoteStyle from './screens/NoteStyle';
 import Trim from './screens/Trim';
+import EditTranscript from './screens/EditTranscript';
 import Export from './screens/Export';
 import GifClip from './screens/GifClip';
 import Saved from './screens/Saved';
@@ -56,6 +57,7 @@ export const SCREENS: Record<ScreenName, ComponentType> = {
   ReviewAsk,
   NoteStyle,
   Trim,
+  EditTranscript,
   Export,
   GifClip,
   Saved,

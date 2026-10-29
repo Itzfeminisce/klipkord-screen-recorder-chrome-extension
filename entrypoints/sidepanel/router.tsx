@@ -21,6 +21,7 @@ export type ScreenName =
   | 'ReviewAsk'
   | 'NoteStyle'
   | 'Trim'
+  | 'EditTranscript'
   | 'Export'
   | 'GifClip'
   | 'Saved'
