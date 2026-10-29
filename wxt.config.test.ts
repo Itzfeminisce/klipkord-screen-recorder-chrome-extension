@@ -22,7 +22,7 @@ describe('manifest', () => {
     const m = await manifest();
     expect(m.optional_host_permissions).toContain('<all_urls>');
     expect(m.host_permissions).not.toContain('<all_urls>');
-    const commands = m.commands as Record<string, { suggested_key: { default: string } }>;
+    const commands = m.commands as Record<string, { suggested_key: { default: string }; description?: string }>;
     expect(Object.keys(commands)).toHaveLength(4);
     expect(commands['toggle-draw']?.suggested_key.default).toBe('Alt+Shift+D');
     expect(commands['toggle-draw']?.description).toBe('Draw on this page');
