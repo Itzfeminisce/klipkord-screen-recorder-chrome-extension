@@ -34,7 +34,8 @@ export function sourceChip(mode: CaptureMode | undefined, modeLabel: string, sou
       : { icon: 'tab', text: address || name, title: address || name };
   }
   if (source.kind === 'window') {
-    const name = source.label.trim();
+    // A label that is only Chrome's source id ("window:123:0") names nothing.
+    const name = /^window:\d+/.test(source.label) ? '' : source.label.trim();
     return name ? { icon: 'window', text: name, title: name } : fallback;
   }
   // Chrome's screen label is "screen:0:0"; it carries no count, so "Screen N of M" cannot be built from it.

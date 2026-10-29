@@ -25,6 +25,9 @@ describe('sourceChip', () => {
     expect(sourceChip('window', 'A window', { kind: 'tab', title: 'x', url: '' })?.text).toBe('A window');
     expect(sourceChip(undefined, '', null)).toBeNull();
   });
+  it('falls back to the mode label when the window label is only a source id', () => {
+    expect(sourceChip('window', 'A window', { kind: 'window', label: 'window:1234:0' })?.text).toBe('A window');
+  });
   it('reads the address without www', () => {
     expect(addressOf('https://www.acme.com/a')).toBe('acme.com');
     expect(addressOf('nope')).toBe('');
