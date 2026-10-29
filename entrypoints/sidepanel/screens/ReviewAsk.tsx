@@ -4,7 +4,7 @@ import { loadKeys } from '@/lib/keys';
 import { availableEngines } from '@/lib/notes/engines';
 import { getSettings } from '@/lib/settings';
 import { formatClock } from '@/lib/time';
-import { ReviewShell, type ReviewContext } from '../components/Player';
+import type { ReviewContext } from '../components/Player';
 import { useRouter } from '../router';
 
 const MONO = "var(--mono, 'Geist Mono', monospace)";
@@ -20,9 +20,7 @@ const PRIMARY: CSSProperties = {
 };
 const SECONDARY: CSSProperties = { ...PRIMARY, background: '#FFFFFF', border: '1px solid #E8E8EB', color: '#111114', boxSizing: 'border-box' };
 
-export default function ReviewAsk() {
-  return <ReviewShell tab="ReviewAsk">{(ctx) => <Ask {...ctx} />}</ReviewShell>;
-}
+export const askTab = (ctx: ReviewContext) => <Ask {...ctx} />;
 
 function Notice({ icon, title, body, children }: { icon: React.ReactNode; title: string; body: string; children: React.ReactNode }) {
   return (

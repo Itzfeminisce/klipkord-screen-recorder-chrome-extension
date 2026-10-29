@@ -83,8 +83,8 @@ function tabStyle(on: boolean) {
   } as const;
 }
 
-/** The header, player and tabs shared by the three Review screens. */
-export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx: ReviewContext) => ReactNode }) {
+/** The header, player and tabs shared by the Review screens. `window` is the full-screen player window, which shows only the player. */
+export function ReviewShell({ tab, window: own = false, children }: { tab: ReviewTab; window?: boolean; children: (ctx: ReviewContext) => ReactNode }) {
   const { route, navigate, replace } = useRouter();
   const id = route.params.recordingId;
   const [rec, setRec] = useState<Recording | null>(null);
@@ -95,7 +95,7 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
   const pending = useRef<number | null>(route.params.atMs ? route.params.atMs / 1000 : null);
   const probing = useRef(false);
   const box = useRef<HTMLDivElement>(null);
-  const [full, setFull] = useState(false);
+  const [full, setFull] = useState(own);
   const [speed, setSpeed] = useState(1);
   const [muted, setMuted] = useState(false);
   const [captionsOn, setCaptionsOn] = useState(false);
@@ -123,10 +123,18 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
   }, [id, rec?.id, rec?.mime]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    if (own) return;
     const sync = () => setFull(!!box.current && document.fullscreenElement === box.current);
     document.addEventListener('fullscreenchange', sync);
     return () => document.removeEventListener('fullscreenchange', sync);
-  }, []);
+  }, [own]);
+
+  useEffect(() => {
+    if (!own) return;
+    const key = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') window.close(); };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
+  }, [own]);
 
   useEffect(() => { if (video.current) video.current.playbackRate = speed; }, [speed, src]);
   useEffect(() => { if (video.current) video.current.muted = muted; }, [muted, src]);
@@ -139,8 +147,15 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
     return () => clearTimeout(t);
   }, [full, playing, moved]);
 
-  const enterFull = () => box.current?.requestFullscreen().catch((error) => console.error('Klipkord: could not open full screen', error));
-  const exitFull = () => { if (document.fullscreenElement) document.exitFullscreen().catch((error) => console.error('Klipkord: could not leave full screen', error)); };
+  // The side panel can't go full screen, so the player opens in its own full-screen window.
+  const enterFull = () => {
+    if (!id) return;
+    const wasPlaying = playing;
+    video.current?.pause();
+    const url = browser.runtime.getURL(`/player.html?recordingId=${encodeURIComponent(id)}&atMs=${Math.round(now)}${wasPlaying ? '&play=1' : ''}`);
+    browser.windows.create({ url, state: 'fullscreen' }).catch((error) => console.error('Klipkord: could not open full screen', error));
+  };
+  const exitFull = () => window.close();
 
   const apply = useCallback(() => {
     const v = video.current;
@@ -157,6 +172,7 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
       probing.current = true;
       v.currentTime = PROBE_SEEK_SECONDS;
     } else apply();
+    if (own && new URLSearchParams(location.search).has('play')) toggle();
   };
   const settle = () => {
     const v = video.current;
@@ -216,9 +232,34 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
   const style = rec.summary?.style;
   const timelineLabel = tab === 'ReviewComments' ? 'Timeline with comments' : 'Timeline';
 
+  const player = (
+    <div ref={box} onMouseMove={() => full && setMoved(Date.now())} onTouchStart={() => full && setMoved(Date.now())}
+      style={full
+        ? { width: '100%', height: '100%', position: 'relative', background: '#000000', cursor: showControls ? 'default' : 'none' }
+        : { width: '100%', aspectRatio: '16 / 9', maxHeight: '50vh', position: 'relative', background: '#26262B' }}>
+      <video ref={video} src={src} playsInline preload="metadata" onLoadedMetadata={onMetadata} onDurationChange={settle} onSeeked={settle}
+        onTimeUpdate={() => { settle(); onTime(); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+        onClick={toggle} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+      {!playing && (
+        <button type="button" aria-label="Play" onClick={toggle}
+          style={{ position: 'absolute', left: '50%', top: '50%', width: 52, height: 52, margin: '-26px 0 0 -26px', padding: 0, border: 'none', borderRadius: '50%', background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{PLAY}</button>
+      )}
+      {full && captionsOn && caption && (
+        <div style={{ position: 'absolute', left: '10%', right: '10%', bottom: showControls ? 110 : 40, textAlign: 'center', pointerEvents: 'none' }}>
+          <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.75)', color: '#F6F6F7', fontSize: 20, lineHeight: 1.35 }}>{caption}</span>
+        </div>
+      )}
+      {full && (
+        <FullscreenOverlay {...controls} title={rec.title} visible={showControls} captionsOn={captionsOn} onCaptions={() => setCaptionsOn((c) => !c)} onExit={exitFull}
+          timeline={<Timeline label="Timeline" rec={rec} now={now} withComments={false} onSeek={seek} />} />
+      )}
+    </div>
+  );
+  if (own) return <main style={{ position: 'fixed', inset: 0, background: '#000000' }}>{player}</main>;
+
   return (
     <main className="screen" style={{ height: '100vh', minHeight: 0, background: '#F6F6F7', color: '#111114' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '12px 16px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '12px 16px 0', flexShrink: 0 }}>
         <button type="button" aria-label="Back to library" onClick={() => replace('Library')}
           style={{ width: 44, height: 44, border: 'none', borderRadius: 12, background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111114', cursor: 'pointer' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" strokeWidth="2" {...stroke}><path d="M15 6l-6 6 6 6" /></svg>
@@ -229,28 +270,8 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
         </span>
       </div>
 
-      <div style={{ margin: '8px 16px 0', borderRadius: 14, background: '#111114', overflow: 'hidden' }}>
-        <div ref={box} onMouseMove={() => full && setMoved(Date.now())} onTouchStart={() => full && setMoved(Date.now())}
-          style={full
-            ? { width: '100%', height: '100%', position: 'relative', background: '#000000', cursor: showControls ? 'default' : 'none' }
-            : { width: '100%', aspectRatio: '16 / 9', position: 'relative', background: '#26262B' }}>
-          <video ref={video} src={src} playsInline preload="metadata" onLoadedMetadata={onMetadata} onDurationChange={settle} onSeeked={settle}
-            onTimeUpdate={() => { settle(); onTime(); }} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
-            onClick={toggle} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
-          {!playing && (
-            <button type="button" aria-label="Play" onClick={toggle}
-              style={{ position: 'absolute', left: '50%', top: '50%', width: 52, height: 52, margin: '-26px 0 0 -26px', padding: 0, border: 'none', borderRadius: '50%', background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{PLAY}</button>
-          )}
-          {full && captionsOn && caption && (
-            <div style={{ position: 'absolute', left: '10%', right: '10%', bottom: showControls ? 110 : 40, textAlign: 'center', pointerEvents: 'none' }}>
-              <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 6, background: 'rgba(0,0,0,0.75)', color: '#F6F6F7', fontSize: 20, lineHeight: 1.35 }}>{caption}</span>
-            </div>
-          )}
-          {full && (
-            <FullscreenOverlay {...controls} title={rec.title} visible={showControls} captionsOn={captionsOn} onCaptions={() => setCaptionsOn((c) => !c)} onExit={exitFull}
-              timeline={<Timeline label="Timeline" rec={rec} now={now} withComments={false} onSeek={seek} />} />
-          )}
-        </div>
+      <div style={{ margin: '8px 16px 0', borderRadius: 14, background: '#111114', overflow: 'hidden', flexShrink: 0 }}>
+        {player}
         <div style={{ padding: '1px 12px 12px', display: 'flex', flexDirection: 'column', gap: 0 }}>
           <Timeline label={timelineLabel} rec={rec} now={now} withComments={tab === 'ReviewComments'} onSeek={seek} />
           <ControlRow {...controls} onFullScreen={enterFull} />
@@ -258,7 +279,7 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
       </div>
 
       {tab === 'Review' && (
-        <div style={{ margin: '12px 16px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ margin: '12px 16px 0', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           {style && (
             <button type="button" onClick={() => go('NoteStyle')}
               style={{ height: 36, padding: '0 12px', border: 'none', borderRadius: 999, background: '#FFF1EA', color: '#9A3412', font: 'inherit', fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
@@ -276,7 +297,7 @@ export function ReviewShell({ tab, children }: { tab: ReviewTab; children: (ctx:
         </div>
       )}
 
-      <div role="tablist" aria-label="Recording views" style={{ margin: '14px 16px 0', display: 'flex', gap: 20, borderBottom: '1px solid #E8E8EB' }}>
+      <div role="tablist" aria-label="Recording views" style={{ margin: '14px 16px 0', display: 'flex', gap: 20, borderBottom: '1px solid #E8E8EB', flexShrink: 0 }}>
         <button type="button" role="tab" aria-selected={tab === 'Review'} onClick={() => tabTo('Review')} style={tabStyle(tab === 'Review')}>Notes</button>
         <button type="button" role="tab" aria-selected={tab === 'ReviewTranscript'} onClick={() => tabTo('ReviewTranscript')} style={tabStyle(tab === 'ReviewTranscript')}>Transcript</button>
         <button type="button" role="tab" aria-selected={tab === 'ReviewComments'} onClick={() => tabTo('ReviewComments')} style={tabStyle(tab === 'ReviewComments')}>

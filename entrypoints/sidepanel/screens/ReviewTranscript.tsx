@@ -2,17 +2,11 @@ import { useEffect, useRef } from 'react';
 import { currentLine, transcriptItems, transcriptText } from '@/lib/comments';
 import { MARKER_LABEL } from '@/lib/markers';
 import { formatClock } from '@/lib/time';
-import { ReviewShell } from '../components/Player';
+import type { ReviewContext } from '../components/Player';
 
 const MONO = "var(--mono, 'Geist Mono', monospace)";
 
-export default function ReviewTranscript() {
-  return (
-    <ReviewShell tab="ReviewTranscript">
-      {({ rec, now, seek }) => <Transcript rec={rec} now={now} seek={seek} />}
-    </ReviewShell>
-  );
-}
+export const transcriptTab = ({ rec, now, seek }: ReviewContext) => <Transcript rec={rec} now={now} seek={seek} />;
 
 function Transcript({ rec, now, seek }: { rec: import('@/lib/types').Recording; now: number; seek: (ms: number) => void }) {
   const current = currentLine(rec.transcript, now);
