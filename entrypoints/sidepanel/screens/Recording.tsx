@@ -2,7 +2,9 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { useRouter } from '../router';
 import { LiveBubblePreview } from '../components/BubblePreview';
 import { command, useNow, useRecorder } from '@/lib/capture';
+import type { MarkerKind } from '@/lib/types';
 import { clockElapsed, type RecorderState } from '@/lib/recorder';
+import { MARKER_KINDS, MARKER_LABEL, addMarker, addNote, markerTime, noteStart } from '@/lib/markers';
 import { isDiskLow, minutesLeft } from '@/lib/storageMath';
 import { formatBytes, formatClock } from '@/lib/time';
 import { ICONS, Icon, MODE_LABEL, MONO, StateCard } from './Home';
@@ -36,12 +38,16 @@ export function LiveHeader({ state, paused }: { state: RecorderState; paused?: b
   );
 }
 
+const SHORTCUTS = [['Stop', 'Alt+Shift+R'], ['Pause or resume', 'Alt+Shift+P'], ['Mark a moment', 'Alt+Shift+M']];
+
 const CONTROL: CSSProperties = { height: 56, border: 'none', borderRadius: 14, background: '#1F1F24', color: '#F6F6F7', font: 'inherit', fontSize: 12, fontWeight: 500, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' };
 
 export default function Recording() {
   const state = useFollowRecorder('recording');
   const now = useNow();
   const [busy, setBusy] = useState(false);
+  const [text, setText] = useState('');
+  const [typedAt, setTypedAt] = useState<number | null>(null);
 
   if (!state || state.status === 'idle') return <main className="screen screen-dark" style={{ minHeight: '100vh' }} />;
   const elapsed = clockElapsed(state.clock, now);
@@ -55,6 +61,24 @@ export default function Recording() {
     if (!reply.ok) console.error('Klipkord: could not control the recording', reply.error);
     setBusy(false);
   }
+
+  const recordingId = state.recordingId;
+  async function mark(kind: MarkerKind) {
+    const at = state ? markerTime(state, Date.now()) : null;
+    if (at === null || !recordingId) return;
+    if (!(await addMarker(recordingId, at, kind))) console.error('Klipkord: could not save the marker', kind);
+  }
+  function type(value: string) {
+    setText(value);
+    setTypedAt(noteStart(typedAt, value, elapsed));
+  }
+  async function submitNote() {
+    if (!recordingId || !text.trim()) return;
+    if (!(await addNote(recordingId, typedAt ?? elapsed, text))) return void console.error('Klipkord: could not save the note', recordingId);
+    setText('');
+    setTypedAt(null);
+  }
+  const noteTime = formatClock(typedAt ?? elapsed);
 
   return (
     <main className="screen screen-dark" style={{ minHeight: '100vh', background: '#111114', color: '#F6F6F7' }}>
@@ -93,14 +117,34 @@ export default function Recording() {
         </button>
       </div>
 
-      {/* T5 slot: "Mark this moment" marker buttons. */}
-      <div data-slot="markers" />
+      <div data-slot="markers" style={{ padding: '18px 24px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 500, color: '#B4B5BC' }}>Mark this moment</span>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
+          {MARKER_KINDS.map((kind) => (
+            <button key={kind} type="button" onClick={() => void mark(kind)}
+              style={{ height: 44, border: '1px solid #2C2C32', borderRadius: 12, background: 'transparent', color: '#F6F6F7', font: 'inherit', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>{MARKER_LABEL[kind]}</button>
+          ))}
+        </div>
+      </div>
 
       {/* T6 slot: live transcript. */}
       <div data-slot="live-transcript" style={{ flexGrow: 1 }} />
 
-      {/* T5 slot: "Type a note at <time>" + "Add". */}
-      <div data-slot="timed-note" style={{ paddingBottom: 24 }} />
+      <div style={{ margin: '0 24px', padding: 12, borderRadius: 12, background: '#1A1A1F', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, color: '#B4B5BC' }}>
+        <span style={{ fontWeight: 600, color: '#F6F6F7' }}>Shortcuts</span>
+        {SHORTCUTS.map(([name, keys]) => (
+          <span key={keys} style={{ display: 'flex', justifyContent: 'space-between' }}><span>{name}</span><span style={{ fontFamily: MONO }}>{keys}</span></span>
+        ))}
+      </div>
+
+      <form data-slot="timed-note" onSubmit={(e) => { e.preventDefault(); void submitNote(); }} style={{ padding: '12px 24px 24px', display: 'flex', gap: 8 }}>
+        <label style={{ flexGrow: 1, display: 'flex' }}>
+          <span style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>Note at {noteTime}</span>
+          <input type="text" value={text} onChange={(e) => type(e.target.value)} placeholder={`Type a note at ${noteTime}`}
+            style={{ width: '100%', height: 44, padding: '0 12px', borderRadius: 12, border: '1px solid #2C2C32', background: '#1A1A1F', color: '#F6F6F7', font: 'inherit', fontSize: 13, boxSizing: 'border-box' }} />
+        </label>
+        <button type="submit" disabled={!text.trim()} style={{ height: 44, padding: '0 16px', border: 'none', borderRadius: 12, background: '#2C2C32', color: '#F6F6F7', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: text.trim() ? 1 : 0.5 }}>Add</button>
+      </form>
     </main>
   );
 }

@@ -6,6 +6,7 @@ export type Message =
   | { type: 'recording/toggle' }
   | { type: 'recording/pause' }
   | { type: 'marker/add'; kind: MarkerKind }
+  | { type: 'marker/undo'; recordingId: string; id: string }   // the shortcut toast's Undo (T5)
   // Side panel and background → offscreen recorder (T3).
   | { type: 'recorder/prepare'; streamId: string; mode: CaptureMode; mic: boolean; sound: boolean; quality: Quality; maxWidth: number; maxHeight: number; camera: boolean; bubble: Settings['bubble'] }
   | { type: 'recorder/bubble'; bubble: Settings['bubble'] }   // corner or size changed (T4)

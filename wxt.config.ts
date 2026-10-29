@@ -9,7 +9,8 @@ export default defineConfig({
     ...(extensionKey ? { key: extensionKey } : {}),
     name: 'Klipkord',
     description: 'Screen recorder in the Chrome side panel',
-    permissions: ['sidePanel', 'offscreen', 'desktopCapture', 'storage', 'unlimitedStorage', 'identity'],
+    // activeTab (granted by a shortcut) + scripting draw the marker toast in the active tab.
+    permissions: ['sidePanel', 'offscreen', 'desktopCapture', 'storage', 'unlimitedStorage', 'identity', 'activeTab', 'scripting'],
     // Requested only when the user turns on Penv Cloud, a cloud key or Ollama.
     optional_host_permissions: [
       'https://penv.cloud/*',
