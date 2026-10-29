@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Klipkord machine check</title>
+    <style>
+      body { font: 14px/1.45 system-ui, sans-serif; margin: 24px; max-width: 1000px; color: #111; background: #fff; }
+      table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+      th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+      td.lines { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; }
+      .pass { color: #0a6b2d; font-weight: 600; } .fail { color: #b00020; font-weight: 600; }
+      .running { color: #8a5a00; font-weight: 600; }
+      p.hint { color: #555; margin: 2px 0 0; font-size: 12px; }
+      #status { margin: 8px 0; min-height: 1.4em; }
+      canvas, video { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>Klipkord machine check</h1>
+    <p>Run each test, then press Copy results and paste the text where CHECK.md says.</p>
+    <button id="copy" type="button">Copy results</button>
+    <div id="status" role="status"></div>
+    <table>
+      <thead><tr><th>Test</th><th>Run</th><th>Status</th><th>Numbers</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <h2>Machine</h2>
+    <table><tbody id="machine"></tbody></table>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
