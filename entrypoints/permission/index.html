@@ -6,15 +6,19 @@
     <title>Mic and camera access</title>
     <style>
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f6f6f7; color: #111114; font-family: system-ui, sans-serif; }
-      main { max-width: 360px; padding: 24px; text-align: center; }
-      h1 { margin: 0 0 8px; font-size: 22px; font-weight: 600; }
+      main { max-width: 400px; display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px; text-align: center; }
+      h1 { margin: 0; font-size: 26px; line-height: 1.2; font-weight: 600; letter-spacing: -0.02em; }
       p { margin: 0; font-size: 15px; line-height: 1.5; color: #5f6168; }
+      .hint { padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid #e8e8eb; font-size: 13px; }
+      .foot { font-size: 12px; color: #6e7079; }
     </style>
   </head>
   <body>
     <main role="status" aria-live="polite">
       <h1>Let Klipkord hear and see you</h1>
-      <p>Chrome will ask once. You pick what to record, screen by screen, each time you start.</p>
+      <p>Chrome will ask once, at the top left of this tab. Klipkord only records when you press Start, and you choose what to share each time.</p>
+      <p class="hint">Pressed Block by mistake? Click the icon beside the address, then turn Microphone on.</p>
+      <span class="foot">This tab closes by itself once you allow the microphone.</span>
     </main>
     <script type="module" src="./main.ts"></script>
   </body>
