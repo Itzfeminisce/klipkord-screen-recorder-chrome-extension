@@ -1,3 +1,5 @@
+> Moved to https://github.com/Itzfeminisce/appskord/tree/main/apps/klipkord. This repository is archived.
+
 # Klipkord
 
 Klipkord is a Chrome side-panel extension that records your screen while you talk.
